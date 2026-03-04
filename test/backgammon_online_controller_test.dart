@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:bullethole_shared/bullethole_shared.dart';
 import 'package:bulletholebackgammon/src/game/engine/backgammon_online_controller.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;

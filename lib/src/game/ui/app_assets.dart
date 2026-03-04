@@ -7,6 +7,7 @@ class AppAssets {
   static const String appBackground = 'assets/generated/ui/background.png';
   static const String backgammonBoardClassic =
       'assets/generated/sheshbesh/backgammon_board_classic.png';
+  static const String backgammonBoardPainted = 'assets/Backgammonboard.png.png';
   static const String horizontalTimeBar =
       'assets/generated/ui/time_bar_horizontal.png';
   static const String verticalTimeBar =

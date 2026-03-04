@@ -10,6 +10,8 @@ Primary mode:
 Game-agnostic code lives in the sibling shared repo and is consumed
 from this app via path dependency:
 - `../bullethole-shared`
+- Shared multiplayer transport lifecycle lives there (`MultiplayerTransportClient`).
+- Backgammon rules/state handling stays in this repo.
 
 Split guidance for carving chess/backgammon into separate repos is in:
 - `docs/repo_split_playbook.md`

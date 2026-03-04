@@ -246,207 +246,22 @@ class _BackgammonOnlinePanelState extends State<BackgammonOnlinePanel> {
               ),
               const SizedBox(height: 10),
               Expanded(
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                child: Column(
                   children: [
                     Expanded(
-                      child: Card(
-                        child: Padding(
-                          padding: const EdgeInsets.all(14),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Session Status',
-                                style: Theme.of(context).textTheme.titleMedium
-                                    ?.copyWith(fontWeight: FontWeight.w700),
-                              ),
-                              const SizedBox(height: 10),
-                              _statusRow(
-                                'Connection',
-                                _controller.connectionState.name,
-                              ),
-                              _statusRow(
-                                'Match ID',
-                                _controller.matchId ?? '-',
-                              ),
-                              _statusRow('Status', _controller.statusText),
-                              _statusRow(
-                                'My Color',
-                                _controller.myColor ?? '-',
-                              ),
-                              _statusRow('Turn', _controller.turnColor ?? '-'),
-                              _statusRow(
-                                'Result',
-                                _controller.resultCode ?? '-',
-                              ),
-                              _statusRow(
-                                'White Cooldown',
-                                _formatDuration(
-                                  _controller.cooldownRemaining('w'),
-                                ),
-                              ),
-                              _statusRow(
-                                'Black Cooldown',
-                                _formatDuration(
-                                  _controller.cooldownRemaining('b'),
-                                ),
-                              ),
-                              _statusRow(
-                                'Players',
-                                'W: ${_controller.whitePlayerName ?? '-'} | '
-                                    'B: ${_controller.blackPlayerName ?? '-'}',
-                              ),
-                              if (_controller.feedback != null) ...[
-                                const SizedBox(height: 8),
-                                Text(
-                                  _controller.feedback!,
-                                  style: const TextStyle(
-                                    color: Color(0xFFB71C1C),
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ],
-                              const SizedBox(height: 12),
-                              Text(
-                                'Server History',
-                                style: Theme.of(context).textTheme.titleSmall
-                                    ?.copyWith(fontWeight: FontWeight.w700),
-                              ),
-                              const SizedBox(height: 6),
-                              Expanded(
-                                child: DecoratedBox(
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFFF7F7F6),
-                                    borderRadius: BorderRadius.circular(10),
-                                    border: Border.all(
-                                      color: const Color(0x1A000000),
-                                    ),
-                                  ),
-                                  child: tailHistory.isEmpty
-                                      ? const Center(
-                                          child: Text(
-                                            'No state history yet.',
-                                            style: TextStyle(
-                                              color: Color(0xFF707070),
-                                            ),
-                                          ),
-                                        )
-                                      : ListView.separated(
-                                          padding: const EdgeInsets.all(8),
-                                          itemCount: tailHistory.length,
-                                          separatorBuilder: (_, index) =>
-                                              const SizedBox(height: 4),
-                                          itemBuilder: (context, index) {
-                                            final entry = tailHistory[index];
-                                            return Text(
-                                              '• $entry',
-                                              style: const TextStyle(
-                                                fontSize: 12,
-                                                color: Color(0xFF2A2A2A),
-                                              ),
-                                            );
-                                          },
-                                        ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
+                      flex: 3,
+                      child: _buildOnlineBoardSurface(canStart: canStart),
                     ),
-                    const SizedBox(width: 10),
+                    const SizedBox(height: 10),
                     Expanded(
-                      child: Card(
-                        child: Padding(
-                          padding: const EdgeInsets.all(14),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Transport Debug',
-                                style: Theme.of(context).textTheme.titleMedium
-                                    ?.copyWith(fontWeight: FontWeight.w700),
-                              ),
-                              const SizedBox(height: 6),
-                              Text(
-                                'Infrastructure is active. Gameplay move semantics can plug into this connection layer.',
-                                style: Theme.of(context).textTheme.bodySmall
-                                    ?.copyWith(color: const Color(0xFF5A554F)),
-                              ),
-                              const SizedBox(height: 10),
-                              Expanded(
-                                child: DecoratedBox(
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFF0F1115),
-                                    borderRadius: BorderRadius.circular(10),
-                                  ),
-                                  child: _controller.debugLogEntries.isEmpty
-                                      ? const Center(
-                                          child: Text(
-                                            'No debug events yet.',
-                                            style: TextStyle(
-                                              color: Color(0xFF9EA3AA),
-                                            ),
-                                          ),
-                                        )
-                                      : ListView.builder(
-                                          padding: const EdgeInsets.all(10),
-                                          itemCount: _controller
-                                              .debugLogEntries
-                                              .length,
-                                          itemBuilder: (context, index) {
-                                            final line = _controller
-                                                .debugLogEntries[index];
-                                            return Padding(
-                                              padding: const EdgeInsets.only(
-                                                bottom: 4,
-                                              ),
-                                              child: Text(
-                                                line,
-                                                style: const TextStyle(
-                                                  fontFamily: 'monospace',
-                                                  fontSize: 11,
-                                                  color: Color(0xFFC8CCD2),
-                                                ),
-                                              ),
-                                            );
-                                          },
-                                        ),
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                'Latest State Snapshot',
-                                style: Theme.of(context).textTheme.titleSmall
-                                    ?.copyWith(fontWeight: FontWeight.w700),
-                              ),
-                              const SizedBox(height: 6),
-                              Expanded(
-                                child: DecoratedBox(
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFFF7F7F6),
-                                    borderRadius: BorderRadius.circular(10),
-                                    border: Border.all(
-                                      color: const Color(0x1A000000),
-                                    ),
-                                  ),
-                                  child: SingleChildScrollView(
-                                    padding: const EdgeInsets.all(8),
-                                    child: Text(
-                                      _prettyJson(_controller.latestState),
-                                      style: const TextStyle(
-                                        fontFamily: 'monospace',
-                                        fontSize: 11,
-                                        color: Color(0xFF2B2B2B),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
+                      flex: 4,
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Expanded(child: _buildSessionStatusCard(tailHistory)),
+                          const SizedBox(width: 10),
+                          Expanded(child: _buildTransportDebugCard()),
+                        ],
                       ),
                     ),
                   ],
@@ -545,6 +360,342 @@ class _BackgammonOnlinePanelState extends State<BackgammonOnlinePanel> {
     }
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('Pulled $count server log entries.')),
+    );
+  }
+
+  Widget _buildOnlineBoardSurface({required bool canStart}) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(10),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final boardSize = constraints.maxHeight < constraints.maxWidth
+                ? constraints.maxHeight
+                : constraints.maxWidth;
+            return Center(
+              child: SizedBox(
+                width: boardSize,
+                height: boardSize,
+                child: Stack(
+                  children: [
+                    Positioned.fill(
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(12),
+                        child: Image.asset(
+                          AppAssets.backgammonBoardPainted,
+                          fit: BoxFit.contain,
+                          filterQuality: FilterQuality.high,
+                          errorBuilder: (context, error, stackTrace) {
+                            return Image.asset(
+                              AppAssets.backgammonBoardClassic,
+                              fit: BoxFit.fill,
+                              filterQuality: FilterQuality.high,
+                              errorBuilder: (context, error, stackTrace) {
+                                return const DecoratedBox(
+                                  decoration: BoxDecoration(
+                                    color: Color(0xFF263238),
+                                  ),
+                                  child: Center(
+                                    child: Text(
+                                      'Board Asset Missing',
+                                      style: TextStyle(color: Colors.white),
+                                    ),
+                                  ),
+                                );
+                              },
+                            );
+                          },
+                        ),
+                      ),
+                    ),
+                    Positioned.fill(
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.18),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                    ),
+                    if (!_controller.isConnected)
+                      Positioned.fill(
+                        child: _buildBoardOverlay(
+                          title: 'Online Board Ready',
+                          subtitle:
+                              'Find a match to start syncing live game state.',
+                          actionLabel: 'Find Match',
+                          onAction: canStart ? _findMatch : null,
+                        ),
+                      )
+                    else if (_controller.isWaitingForOpponent)
+                      Positioned.fill(
+                        child: _buildBoardOverlay(
+                          title: 'Waiting For Opponent',
+                          subtitle:
+                              'Board remains visible while matchmaking completes.',
+                          loading: true,
+                        ),
+                      )
+                    else
+                      Positioned(
+                        left: 10,
+                        top: 10,
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            color: Colors.black.withValues(alpha: 0.55),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
+                            child: Text(
+                              'Match ${_controller.matchId ?? '-'}',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBoardOverlay({
+    required String title,
+    required String subtitle,
+    String? actionLabel,
+    VoidCallback? onAction,
+    bool loading = false,
+  }) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.42),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (loading) ...[
+                const SizedBox(
+                  width: 22,
+                  height: 22,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+                const SizedBox(height: 10),
+              ],
+              Text(
+                title,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                subtitle,
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: Color(0xFFE6E6E6), fontSize: 12),
+              ),
+              if (actionLabel != null) ...[
+                const SizedBox(height: 12),
+                FilledButton(onPressed: onAction, child: Text(actionLabel)),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSessionStatusCard(List<String> tailHistory) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Session Status',
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 10),
+            _statusRow('Connection', _controller.connectionState.name),
+            _statusRow('Match ID', _controller.matchId ?? '-'),
+            _statusRow('Status', _controller.statusText),
+            _statusRow('My Color', _controller.myColor ?? '-'),
+            _statusRow('Turn', _controller.turnColor ?? '-'),
+            _statusRow('Result', _controller.resultCode ?? '-'),
+            _statusRow(
+              'White Cooldown',
+              _formatDuration(_controller.cooldownRemaining('w')),
+            ),
+            _statusRow(
+              'Black Cooldown',
+              _formatDuration(_controller.cooldownRemaining('b')),
+            ),
+            _statusRow(
+              'Players',
+              'W: ${_controller.whitePlayerName ?? '-'} | '
+                  'B: ${_controller.blackPlayerName ?? '-'}',
+            ),
+            if (_controller.feedback != null) ...[
+              const SizedBox(height: 8),
+              Text(
+                _controller.feedback!,
+                style: const TextStyle(
+                  color: Color(0xFFB71C1C),
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+            const SizedBox(height: 12),
+            Text(
+              'Server History',
+              style: Theme.of(
+                context,
+              ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 6),
+            Expanded(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF7F7F6),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: const Color(0x1A000000)),
+                ),
+                child: tailHistory.isEmpty
+                    ? const Center(
+                        child: Text(
+                          'No state history yet.',
+                          style: TextStyle(color: Color(0xFF707070)),
+                        ),
+                      )
+                    : ListView.separated(
+                        padding: const EdgeInsets.all(8),
+                        itemCount: tailHistory.length,
+                        separatorBuilder: (_, index) =>
+                            const SizedBox(height: 4),
+                        itemBuilder: (context, index) {
+                          final entry = tailHistory[index];
+                          return Text(
+                            '• $entry',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: Color(0xFF2A2A2A),
+                            ),
+                          );
+                        },
+                      ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTransportDebugCard() {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Transport Debug',
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Infrastructure is active. Gameplay move semantics can plug into this connection layer.',
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(color: const Color(0xFF5A554F)),
+            ),
+            const SizedBox(height: 10),
+            Expanded(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: const Color(0xFF0F1115),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: _controller.debugLogEntries.isEmpty
+                    ? const Center(
+                        child: Text(
+                          'No debug events yet.',
+                          style: TextStyle(color: Color(0xFF9EA3AA)),
+                        ),
+                      )
+                    : ListView.builder(
+                        padding: const EdgeInsets.all(10),
+                        itemCount: _controller.debugLogEntries.length,
+                        itemBuilder: (context, index) {
+                          final line = _controller.debugLogEntries[index];
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 4),
+                            child: Text(
+                              line,
+                              style: const TextStyle(
+                                fontFamily: 'monospace',
+                                fontSize: 11,
+                                color: Color(0xFFC8CCD2),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Latest State Snapshot',
+              style: Theme.of(
+                context,
+              ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 6),
+            Expanded(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF7F7F6),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: const Color(0x1A000000)),
+                ),
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(8),
+                  child: Text(
+                    _prettyJson(_controller.latestState),
+                    style: const TextStyle(
+                      fontFamily: 'monospace',
+                      fontSize: 11,
+                      color: Color(0xFF2B2B2B),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
