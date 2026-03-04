@@ -91,6 +91,23 @@ Output paths:
 - unsigned zip (from `--no-codesign`): `build/ios/iphoneos/Runner-no-codesign.zip`
 - signed IPA (when signing succeeds): `build/ios/ipa/Runner.ipa`
 
+### One-click installers from GitHub Actions
+
+Use workflow `.github/workflows/mobile-installers.yml` (`Actions` -> `Mobile Installers` -> `Run workflow`).
+
+Artifacts produced:
+
+- `android-installers`
+  - `app-release.apk` (universal installer)
+  - split APKs (`arm64-v8a`, `armeabi-v7a`, `x86_64`)
+  - `app-release.aab` (Google Play upload)
+  - checksum file: `android-sha256.txt`
+- `ios-unsigned-installer`
+  - `Runner-no-codesign.zip`
+  - checksum file: `ios-unsigned-sha256.txt`
+
+Note: unsigned iOS artifacts are for packaging/verification only; installation on iOS devices requires a signed IPA generated on macOS with valid Apple signing credentials.
+
 ### Windows quick launch for AI-vs-AI bug hunt
 
 - Double-click `run-ai-duel.cmd` from repo root.
