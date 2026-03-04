@@ -1,0 +1,72 @@
+name: Azure Static Web Apps CI/CD
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "lib/**"
+      - "web/**"
+      - "pubspec.yaml"
+      - "pubspec.lock"
+      - ".github/workflows/azure-static-web-apps-brave-pond-03a16080f.yml"
+  pull_request:
+    types: [opened, synchronize, reopened, closed]
+    branches:
+      - main
+    paths:
+      - "lib/**"
+      - "web/**"
+      - "pubspec.yaml"
+      - "pubspec.lock"
+      - ".github/workflows/azure-static-web-apps-brave-pond-03a16080f.yml"
+
+jobs:
+  build_and_deploy_job:
+    if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.action != 'closed')
+    runs-on: ubuntu-latest
+    name: Build and Deploy Job
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: false
+          lfs: false
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - name: Install dependencies
+        run: flutter pub get
+      - name: Build Flutter web
+        shell: bash
+        env:
+          DEFAULT_BACKEND_URL: ${{ vars.DEFAULT_BACKEND_URL }}
+        run: |
+          if [ -n "$DEFAULT_BACKEND_URL" ]; then
+            flutter build web --release --dart-define=DEFAULT_BACKEND_URL="$DEFAULT_BACKEND_URL"
+          else
+            flutter build web --release
+          fi
+      - name: Build And Deploy
+        id: builddeploy
+        uses: Azure/static-web-apps-deploy@v1
+        with:
+          azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN_BRAVE_POND_03A16080F }}
+          repo_token: ${{ secrets.GITHUB_TOKEN }} # Used for Github integrations (i.e. PR comments)
+          action: "upload"
+          app_location: "build/web"
+          api_location: ""
+          output_location: ""
+          skip_app_build: true
+
+  close_pull_request_job:
+    if: github.event_name == 'pull_request' && github.event.action == 'closed'
+    runs-on: ubuntu-latest
+    name: Close Pull Request Job
+    steps:
+      - name: Close Pull Request
+        id: closepullrequest
+        uses: Azure/static-web-apps-deploy@v1
+        with:
+          azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN_BRAVE_POND_03A16080F }}
+          action: "close"

@@ -1,0 +1,37 @@
+name: Flutter Side Nightly AI Duels
+
+on:
+  schedule:
+    - cron: "0 7 * * *"
+  workflow_dispatch:
+
+jobs:
+  ai-duel-stress:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: AI-vs-AI stress duel
+        run: dart run tool/ai_duel.dart --games=500 --max-plies=260 --seed=20260226 --conversion-fail-cap-adv=5 --max-conversion-failures=14 --log-file=debug/nightly-ai-duel-weird.jsonl --pgn-dir=debug/nightly-ai-duel-weird-pgn
+
+      - name: Upload AI duel weird logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-duel-weird-logs-nightly
+          path: |
+            debug/nightly-ai-duel-weird.jsonl
+            debug/nightly-ai-duel-weird-pgn
+          if-no-files-found: warn
