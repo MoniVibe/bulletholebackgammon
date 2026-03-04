@@ -60,6 +60,8 @@ class SheshBeshBoardView extends StatelessWidget {
   final VoidCallback onBearOffTap;
 
   static const _maxVisibleStack = 5;
+  // Keep stack math unchanged but scale checker footprint up for stronger presence.
+  static const double _checkerScaleMultiplier = 1.4;
 
   @override
   Widget build(BuildContext context) {
@@ -258,7 +260,7 @@ class SheshBeshBoardView extends StatelessWidget {
         continue;
       }
 
-      final tokenSize = pointRect.width * 0.88;
+      final tokenSize = pointRect.width * 0.88 * _checkerScaleMultiplier;
       final visibleCount = math.min(stack.count, _maxVisibleStack);
       final isTopRow = pointRect.center.dy < boardCenterY;
       final sourcePlayable = playableSourcePoints.contains(pointIndex);
@@ -429,7 +431,7 @@ class SheshBeshBoardView extends StatelessWidget {
       return const SizedBox.shrink();
     }
 
-    final tokenSize = rect.width * 0.85;
+    final tokenSize = rect.width * 0.85 * _checkerScaleMultiplier;
     final visible = math.min(count, 4);
     final widgets = <Widget>[];
     for (var i = 0; i < visible; i++) {
