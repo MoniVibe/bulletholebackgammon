@@ -68,7 +68,6 @@ flutter:
     - assets/Newgame.png
     - assets/rematch.png
     - assets/feedback.png
-    - assets/Boardalt.png.png
     - assets/Backgammonboard.png.png
 
   # An image asset can refer to one or more resolution-specific "variants", see

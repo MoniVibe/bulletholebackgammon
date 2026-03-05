@@ -10,7 +10,7 @@ import 'package:http/http.dart' as http;
 /// Reasoning:
 /// - Keeps matchmaking/network/session concerns isolated from rules/playability.
 /// - Allows gameplay logic to be plugged in later without rewriting transport.
-/// - Preserves compatibility with current chess-style backend endpoints.
+/// - Preserves compatibility with the current shared realtime endpoint contract.
 class BackgammonOnlineController extends ChangeNotifier {
   static const String _defaultPieceSkinId = 'bg_royal';
   static const Duration _defaultHealthTimeout = Duration(seconds: 5);

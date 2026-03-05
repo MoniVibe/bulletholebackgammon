@@ -3,10 +3,9 @@
 Preprocesses raw art drops into runtime-ready transparent UI assets.
 
 Reasoning:
-- The source images are mostly RGB PNGs with a flat pearl backdrop.
-- Rendering them directly in squares/bars creates visible rectangular boxes.
-- We remove only the background connected to image borders, then trim/scale.
-  This keeps internal light details intact while making the assets composable.
+- Source images may include flat backdrops or noisy alpha edges.
+- Runtime board/checker composition needs clean transparency.
+- We keep only the intended foreground and normalize output sizes.
 """
 
 from __future__ import annotations
@@ -21,31 +20,10 @@ from PIL import Image, ImageFilter
 ROOT = Path(__file__).resolve().parents[1]
 ASSETS_DIR = ROOT / "assets"
 GENERATED_DIR = ASSETS_DIR / "generated"
-PIECES_DIR = GENERATED_DIR / "pieces"
 UI_DIR = GENERATED_DIR / "ui"
 SHESHBESH_DIR = GENERATED_DIR / "sheshbesh"
 
-PIECE_BG_TOLERANCE = 6
-PIECE_ALPHA_BLUR_RADIUS = 0.35
-BOARD_CANVAS_SIZE = 1024
-BOARD_PLAYABLE_INSET = 120
-BOARD_PLAYABLE_SIZE = BOARD_CANVAS_SIZE - (BOARD_PLAYABLE_INSET * 2)
 BACKGAMMON_BOARD_SIZE = 1024
-
-SOURCE_PIECES = {
-    "wP.png": ("wP.png-removebg-preview.png", "wP.png.png"),
-    "wR.png": ("wR.png-removebg-preview.png", "wR.png.png"),
-    "wN.png": ("wK.png-removebg-preview.png", "wK.png.png"),
-    "wB.png": ("wB.png-removebg-preview.png", "wB.png.png"),
-    "wQ.png": ("wQ.png-removebg-preview.png", "wQ.png.png"),
-    "wK.png": ("wKing.png-removebg-preview.png", "wKing.png.png"),
-    "bP.png": ("bP.png-removebg-preview.png", "bP.png.png"),
-    "bR.png": ("bR.png-removebg-preview.png", "bR.png.png"),
-    "bN.png": ("bK.png-removebg-preview.png", "bK.png.png"),
-    "bB.png": ("bB.png-removebg-preview.png", "bB.png.png"),
-    "bQ.png": ("bQ.png-removebg-preview.png", "bQ.png.png"),
-    "bK.png": ("bKing.png-removebg-preview.png", "bKing.png.png"),
-}
 
 SOURCE_COINS = {
     "white_coin.png": ("wCoin.png-removebg-preview.png", "wCoin.png.png"),
@@ -64,31 +42,6 @@ SOURCE_DICE = {
     "dice_4.png": ("D4.png-removebg-preview.png", "D4.png.png"),
     "dice_5.png": ("D5.png-removebg-preview.png", "D5.png.png"),
     "dice_6.png": ("D6.png-removebg-preview.png", "D6.png.png"),
-}
-
-SOURCE_RED_CHESS_PIECES = {
-    "rP.png": (
-        "rP.png-removebg-preview.png",
-        "rP.png.png",
-        "ChatGPT Image Mar 4, 2026, 08_14_44 PM.png",
-    ),
-    "rR.png": (
-        "rR.png-removebg-preview.png",
-        "rR.png.png",
-        "ChatGPT Image Mar 4, 2026, 08_16_10 PM.png",
-    ),
-    "rN.png": ("rK.png-removebg-preview.png", "rK.png.png"),
-    "rB.png": ("rB.png-removebg-preview.png", "rB.png.png"),
-    "rQ.png": (
-        "rQ.png-removebg-preview.png",
-        "rQ.png.png",
-        "ChatGPT Image Mar 4, 2026, 08_21_34 PM.png",
-    ),
-    "rK.png": (
-        "rKing.png-removebg-preview.png",
-        "rKing.png.png",
-        "ChatGPT Image Mar 4, 2026, 08_18_12 PM.png",
-    ),
 }
 
 SOURCE_BACKGAMMON_BOARDS = {
@@ -185,7 +138,6 @@ def _remove_edge_connected_background(
         for x in range(width):
             alpha_pixels[x, y] = 0 if visited[row_offset + x] else 255
 
-    # Slight blur softens cutout edges to avoid jagged outlines after scaling.
     if blur_radius > 0:
         alpha = alpha.filter(ImageFilter.GaussianBlur(radius=blur_radius))
 
@@ -261,7 +213,6 @@ def _keep_largest_alpha_component(
     for x, y in largest_component:
         keep_pixels[x, y] = alpha_pixels[x, y]
 
-    # Keep anti-aliased edges close to the main body for smooth rendering.
     keep_mask = keep_mask.filter(ImageFilter.GaussianBlur(radius=0.6))
 
     rgba = image.convert("RGBA")
@@ -303,110 +254,27 @@ def _save_png(path: Path, image: Image.Image) -> None:
     image.save(path, format="PNG", optimize=True)
 
 
-def _detect_black_bbox(
-    image: Image.Image,
-    threshold: int = 12,
-    alpha_threshold: int = 20,
-) -> tuple[int, int, int, int]:
+def _normalize_backgammon_board(image: Image.Image) -> Image.Image:
     rgba = image.convert("RGBA")
     width, height = rgba.size
-    pixels = rgba.load()
-    min_x = width
-    min_y = height
-    max_x = -1
-    max_y = -1
+    if width == height:
+        return rgba.resize(
+            (BACKGAMMON_BOARD_SIZE, BACKGAMMON_BOARD_SIZE),
+            Image.Resampling.LANCZOS,
+        )
 
-    for y in range(height):
-        for x in range(width):
-            r, g, b, a = pixels[x, y]
-            if a < alpha_threshold:
-                continue
-            if r < threshold and g < threshold and b < threshold:
-                if x < min_x:
-                    min_x = x
-                if y < min_y:
-                    min_y = y
-                if x > max_x:
-                    max_x = x
-                if y > max_y:
-                    max_y = y
+    # Normalize all skins to a square gameplay canvas to keep point overlay alignment.
+    if width > height:
+        offset = (width - height) // 2
+        cropped = rgba.crop((offset, 0, offset + height, height))
+    else:
+        offset = (height - width) // 2
+        cropped = rgba.crop((0, offset, width, offset + width))
 
-    if max_x < min_x or max_y < min_y:
-        raise ValueError("Could not detect black-board area for alignment.")
-
-    return (min_x, min_y, max_x, max_y)
-
-
-def _normalize_board_frame(board_image: Image.Image) -> Image.Image:
-    try:
-        x0, y0, x1, y1 = _detect_black_bbox(board_image, threshold=12)
-    except ValueError:
-        alpha_bbox = board_image.split()[-1].getbbox()
-        if alpha_bbox is None:
-            raise
-        x0, y0, x1_exclusive, y1_exclusive = alpha_bbox
-        x1 = x1_exclusive - 1
-        y1 = y1_exclusive - 1
-
-    black_width = x1 - x0 + 1
-    black_height = y1 - y0 + 1
-
-    if black_width <= 0 or black_height <= 0:
-        raise ValueError("Invalid board black-area bounds.")
-
-    scale_x = BOARD_PLAYABLE_SIZE / black_width
-    scale_y = BOARD_PLAYABLE_SIZE / black_height
-    resized = board_image.resize(
-        (
-            max(1, int(round(board_image.width * scale_x))),
-            max(1, int(round(board_image.height * scale_y))),
-        ),
+    return cropped.resize(
+        (BACKGAMMON_BOARD_SIZE, BACKGAMMON_BOARD_SIZE),
         Image.Resampling.LANCZOS,
     )
-
-    # Keep the detected playable area at a deterministic inset for exact runtime mapping.
-    offset_x = int(round(BOARD_PLAYABLE_INSET - (x0 * scale_x)))
-    offset_y = int(round(BOARD_PLAYABLE_INSET - (y0 * scale_y)))
-
-    canvas = Image.new(
-        "RGBA",
-        (BOARD_CANVAS_SIZE, BOARD_CANVAS_SIZE),
-        (0, 0, 0, 0),
-    )
-    canvas.paste(resized, (offset_x, offset_y), resized)
-    return canvas
-
-
-def _process_piece(source_name: str, output_name: str) -> None:
-    source_path = ASSETS_DIR / source_name
-    output_path = PIECES_DIR / output_name
-    image = Image.open(source_path)
-    cutout = _remove_edge_connected_background(
-        image,
-        tolerance=PIECE_BG_TOLERANCE,
-        blur_radius=PIECE_ALPHA_BLUR_RADIUS,
-    )
-    main_shape = _keep_largest_alpha_component(cutout, alpha_floor=12)
-    trimmed = _trim_transparency(main_shape)
-    square_piece = _compose_piece_canvas(trimmed)
-    _save_png(output_path, square_piece)
-    print(f"piece: {source_name} -> {output_path.relative_to(ROOT)}")
-
-
-def _process_red_chess_piece(source_name: str, output_name: str) -> None:
-    source_path = ASSETS_DIR / source_name
-    output_path = PIECES_DIR / output_name
-    image = Image.open(source_path)
-    cutout = _remove_edge_connected_background(
-        image,
-        tolerance=16,
-        blur_radius=0.35,
-    )
-    main_shape = _keep_largest_alpha_component(cutout, alpha_floor=10)
-    trimmed = _trim_transparency(main_shape)
-    square_piece = _compose_piece_canvas(trimmed)
-    _save_png(output_path, square_piece)
-    print(f"piece: {source_name} -> {output_path.relative_to(ROOT)}")
 
 
 def _process_coin(source_name: str, output_name: str) -> None:
@@ -417,9 +285,6 @@ def _process_coin(source_name: str, output_name: str) -> None:
     alpha_min, alpha_max = alpha.getextrema()
 
     if alpha_min < alpha_max:
-        # Respect authored transparency when present (ruby coin source uses
-        # transparent background). This avoids re-cutting and introducing
-        # opaque fringe artifacts.
         main_shape = _keep_largest_alpha_component(image, alpha_floor=1)
     else:
         cutout = _remove_edge_connected_background(
@@ -428,6 +293,7 @@ def _process_coin(source_name: str, output_name: str) -> None:
             blur_radius=0.35,
         )
         main_shape = _keep_largest_alpha_component(cutout, alpha_floor=10)
+
     trimmed = _trim_transparency(main_shape)
     square_piece = _compose_piece_canvas(
         trimmed,
@@ -447,9 +313,7 @@ def _process_dice_face(source_name: str, output_name: str) -> None:
     alpha_min, alpha_max = alpha.getextrema()
 
     if alpha_min < alpha_max:
-        # Some source faces (notably D1) include usable alpha but also
-        # translucent fringe noise. Use a strong alpha gate and keep only the
-        # largest connected component so the final die has clean edges.
+        # Face 1 in some packs has noisy translucent fringe; gate alpha before extract.
         gated_alpha = alpha.point(lambda v: 255 if v > 120 else 0)
         masked = image.copy()
         masked.putalpha(gated_alpha)
@@ -461,6 +325,7 @@ def _process_dice_face(source_name: str, output_name: str) -> None:
             blur_radius=0.3,
         )
         main_shape = _keep_largest_alpha_component(cutout, alpha_floor=8)
+
     trimmed = _trim_transparency(main_shape)
     square = _compose_piece_canvas(
         trimmed,
@@ -472,30 +337,6 @@ def _process_dice_face(source_name: str, output_name: str) -> None:
     print(f"dice:  {source_name} -> {output_path.relative_to(ROOT)}")
 
 
-def _normalize_backgammon_board(image: Image.Image) -> Image.Image:
-    rgba = image.convert("RGBA")
-    width, height = rgba.size
-    if width == height:
-        return rgba.resize(
-            (BACKGAMMON_BOARD_SIZE, BACKGAMMON_BOARD_SIZE),
-            Image.Resampling.LANCZOS,
-        )
-
-    # Normalize all skin boards to a square gameplay canvas so point overlays
-    # stay aligned regardless of source art aspect ratio.
-    if width > height:
-        offset = (width - height) // 2
-        cropped = rgba.crop((offset, 0, offset + height, height))
-    else:
-        offset = (height - width) // 2
-        cropped = rgba.crop((0, offset, width, offset + width))
-
-    return cropped.resize(
-        (BACKGAMMON_BOARD_SIZE, BACKGAMMON_BOARD_SIZE),
-        Image.Resampling.LANCZOS,
-    )
-
-
 def _process_backgammon_board(source_name: str, output_name: str) -> None:
     source_path = ASSETS_DIR / source_name
     output_path = SHESHBESH_DIR / output_name
@@ -503,17 +344,6 @@ def _process_backgammon_board(source_name: str, output_name: str) -> None:
     normalized = _normalize_backgammon_board(image)
     _save_png(output_path, normalized)
     print(f"bgui:  {source_name} -> {output_path.relative_to(ROOT)}")
-
-
-def _process_board_image() -> None:
-    source_path = ASSETS_DIR / "boardPearl.png.png"
-    output_path = UI_DIR / "board.png"
-    image = Image.open(source_path)
-    cutout = _remove_edge_connected_background(image, tolerance=26)
-    trimmed = _trim_transparency(cutout)
-    normalized = _normalize_board_frame(trimmed)
-    _save_png(output_path, normalized)
-    print(f"ui:    boardPearl.png.png -> {output_path.relative_to(ROOT)}")
 
 
 def _process_ui_image(
@@ -554,20 +384,12 @@ def _resolve_source_name(*, label: str, candidates: Iterable[str]) -> str:
 
 def main() -> None:
     required_paths = [
-        ASSETS_DIR / "boardPearl.png.png",
+        ASSETS_DIR / "Backgammonboard.png.png",
         ASSETS_DIR / "HorizontalTimeBar.png.png",
         ASSETS_DIR / "VerticalTimeBar.png.png",
         ASSETS_DIR / "PearlBG.png.png",
     ]
     _ensure_sources_exist(required_paths)
-
-    for output_name, candidates in SOURCE_PIECES.items():
-        source_name = _resolve_source_name(label=output_name, candidates=candidates)
-        _process_piece(source_name, output_name)
-
-    for output_name, candidates in SOURCE_RED_CHESS_PIECES.items():
-        source_name = _resolve_source_name(label=output_name, candidates=candidates)
-        _process_red_chess_piece(source_name, output_name)
 
     for output_name, candidates in SOURCE_COINS.items():
         source_name = _resolve_source_name(label=output_name, candidates=candidates)
@@ -581,7 +403,6 @@ def main() -> None:
         source_name = _resolve_source_name(label=output_name, candidates=candidates)
         _process_backgammon_board(source_name, output_name)
 
-    _process_board_image()
     _process_ui_image(
         "HorizontalTimeBar.png.png",
         "time_bar_horizontal.png",
@@ -605,6 +426,7 @@ def main() -> None:
             tolerance=24,
             max_size=max_size,
         )
+
     _process_ui_image(
         "PearlBG.png.png",
         "background.png",
@@ -614,10 +436,6 @@ def main() -> None:
     )
 
     print("done: generated visual assets under assets/generated/")
-    print(
-        "board playable rect: "
-        f"inset={BOARD_PLAYABLE_INSET}px, size={BOARD_PLAYABLE_SIZE}px"
-    )
 
 
 if __name__ == "__main__":

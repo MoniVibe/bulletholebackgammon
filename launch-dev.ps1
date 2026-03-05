@@ -13,9 +13,11 @@ $repoRoot = $PSScriptRoot
 $backendDir = Join-Path $repoRoot 'multiplayer_node_server'
 $flutterDefault = 'C:\dev\flutter\bin\flutter.bat'
 $flutterExe = if (Test-Path $flutterDefault) { $flutterDefault } else { 'flutter' }
+$backendAvailable = Test-Path $backendDir
 
-if (-not (Test-Path $backendDir)) {
-  throw "Backend directory not found: $backendDir"
+if (-not $backendAvailable -and -not $SkipBackend) {
+  Write-Warning "Backend directory not found: $backendDir. Starting app without local backend."
+  $SkipBackend = $true
 }
 
 if (-not $SkipBackend) {
@@ -57,10 +59,14 @@ if ($DryRun) {
     ) | Out-Null
 }
 
-Write-Host 'Launched Bullethole Chess dev stack.' -ForegroundColor Green
+Write-Host 'Launched Backholegammon dev stack.' -ForegroundColor Green
 Write-Host "App: flutter run -d $Device --dart-define=DEFAULT_BACKEND_URL=$BackendUrl"
 if ($SkipBackend) {
-  Write-Host 'Backend: skipped (--SkipBackend set)'
+  if ($backendAvailable) {
+    Write-Host 'Backend: skipped (--SkipBackend set)'
+  } else {
+    Write-Host 'Backend: skipped (no local backend directory in this repo)'
+  }
 } else {
   Write-Host 'Backend: npm start (multiplayer_node_server)'
 }
