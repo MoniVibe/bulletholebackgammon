@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math';
 
+import 'package:bullethole_shared/bullethole_shared.dart';
 import 'package:flutter/foundation.dart';
 
 import 'sheshbesh_ai_engine.dart';
@@ -28,6 +29,11 @@ class LocalGameController extends ChangeNotifier {
   final Duration aiThinkDelayMax;
   final Random _random;
   final SheshBeshAiEngine _aiEngine;
+  final GameSessionLogger _sessionLogger = GameSessionLogger(
+    applicationId: 'bulletholebackgammon',
+    gameId: 'backgammon',
+    mode: 'local_duel',
+  );
 
   late Timer _ticker;
   Timer? _aiTurnTimer;
@@ -167,6 +173,13 @@ class LocalGameController extends ChangeNotifier {
     if (cooldownDuration != null) {
       _cooldownDuration = cooldownDuration;
     }
+    _sessionLogger.beginSession(
+      sessionLabel: 'new_game',
+      context: <String, Object?>{
+        'playerAsWhite': playerAsWhite,
+        'cooldownSeconds': _cooldownDuration.inSeconds,
+      },
+    );
 
     _resetRuntimeState(activateGame: true);
 
@@ -179,6 +192,7 @@ class LocalGameController extends ChangeNotifier {
     _startTurnForColor(opening.startingColor);
     _refreshPlayerDecision();
     _maybeScheduleAiTurn();
+    _sessionLogger.logEvent('new_game_started', data: _sessionSnapshot());
     notifyListeners();
   }
 
@@ -298,6 +312,10 @@ class LocalGameController extends ChangeNotifier {
 
   @override
   void dispose() {
+    _sessionLogger.closeSession(
+      reason: 'controller_dispose',
+      summary: _sessionSnapshot(),
+    );
     _disposed = true;
     _ticker.cancel();
     _cancelAiTimer();
@@ -409,6 +427,15 @@ class LocalGameController extends ChangeNotifier {
 
     _refreshPlayerDecision();
     _maybeScheduleAiTurn();
+    _sessionLogger.logEvent(
+      'move_applied',
+      data: <String, Object?>{
+        ..._sessionSnapshot(),
+        'moverColor': moverColor,
+        'move': move.describe(moverColor),
+        'actor': actorIsPlayer ? 'player' : 'ai',
+      },
+    );
   }
 
   void _completeDiceBatch(String color) {
@@ -969,6 +996,25 @@ class LocalGameController extends ChangeNotifier {
     }
     final halfSteps = (ms / 500).ceil();
     return '${(halfSteps / 2).toStringAsFixed(1)}s';
+  }
+
+  Map<String, Object?> _sessionSnapshot() {
+    return <String, Object?>{
+      'playerColor': _playerColor,
+      'turnColor': _turnColor,
+      'hasActiveGame': _hasActiveGame,
+      'isGameOver': isGameOver,
+      'winnerColor': _winnerColor,
+      'historyLen': _history.length,
+      'diceW': _diceByColor['w']?.join(','),
+      'diceB': _diceByColor['b']?.join(','),
+      'barW': _position.barCount('w'),
+      'barB': _position.barCount('b'),
+      'borneOffW': _position.borneOffCount('w'),
+      'borneOffB': _position.borneOffCount('b'),
+      'feedback': _feedback,
+      'cooldownSeconds': _cooldownDuration.inSeconds,
+    };
   }
 }
 

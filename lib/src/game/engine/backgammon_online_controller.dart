@@ -39,6 +39,13 @@ class BackgammonOnlineController extends ChangeNotifier {
       const Duration(milliseconds: 200),
       (_) => _onTick(),
     );
+    _sessionLogger.beginSession(
+      sessionLabel: 'controller_boot',
+      context: <String, Object?>{
+        'cooldownSeconds': _cooldownDuration.inSeconds,
+      },
+    );
+    _sessionLogger.logEvent('controller_initialized');
   }
 
   late final Timer _ticker;
@@ -74,6 +81,11 @@ class BackgammonOnlineController extends ChangeNotifier {
   final List<String> _history = <String>[];
   Map<String, dynamic>? _latestState;
   final List<String> _debugLogEntries = <String>[];
+  final GameSessionLogger _sessionLogger = GameSessionLogger(
+    applicationId: 'bulletholebackgammon',
+    gameId: 'backgammon',
+    mode: 'online',
+  );
 
   OnlineConnectionState get connectionState => _connectionState;
   BackendHealthState get backendHealthState => _backendHealthState;
@@ -226,6 +238,14 @@ class BackgammonOnlineController extends ChangeNotifier {
         'name': normalizedName,
         'cooldownSeconds': cooldownSeconds,
         'pieceSkinId': _myPieceSkinId,
+      },
+    );
+    _sessionLogger.beginSession(
+      sessionLabel: 'find_match',
+      context: <String, Object?>{
+        'apiBase': apiBaseUrl.trim(),
+        'displayName': normalizedName,
+        'cooldownSeconds': cooldownSeconds,
       },
     );
     notifyListeners();
@@ -442,6 +462,10 @@ class BackgammonOnlineController extends ChangeNotifier {
     final now = DateTime.now().millisecondsSinceEpoch;
     _whiteReadyAtMs = now;
     _blackReadyAtMs = now;
+    _sessionLogger.closeSession(
+      reason: 'disconnect',
+      summary: _sessionSnapshot(),
+    );
 
     if (notify) {
       notifyListeners();
@@ -450,6 +474,10 @@ class BackgammonOnlineController extends ChangeNotifier {
 
   @override
   void dispose() {
+    _sessionLogger.closeSession(
+      reason: 'controller_dispose',
+      summary: _sessionSnapshot(),
+    );
     _disposed = true;
     _ticker.cancel();
     disconnect(notify: false);
@@ -802,6 +830,7 @@ class BackgammonOnlineController extends ChangeNotifier {
     if (kDebugMode) {
       debugPrint('[bg-online] $line');
     }
+    _sessionLogger.logEvent(event, data: details);
   }
 
   void _appendServerLogLine(Map<String, dynamic> entry) {
@@ -849,5 +878,21 @@ class BackgammonOnlineController extends ChangeNotifier {
     }
     final halfSteps = (ms / 500).ceil();
     return '${(halfSteps / 2).toStringAsFixed(1)}s';
+  }
+
+  Map<String, Object?> _sessionSnapshot() {
+    return <String, Object?>{
+      'connectionState': _connectionState.name,
+      'status': _status,
+      'matchId': _matchId,
+      'myColor': _myColor,
+      'turnColor': _turnColor,
+      'result': _result,
+      'historyLen': _history.length,
+      'cooldownSeconds': _cooldownDuration.inSeconds,
+      'whiteRemainingMs': cooldownRemaining('w').inMilliseconds,
+      'blackRemainingMs': cooldownRemaining('b').inMilliseconds,
+      'feedback': _feedback,
+    };
   }
 }
