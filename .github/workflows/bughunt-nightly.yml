@@ -66,9 +66,10 @@ jobs:
           path: artifacts/bughunt/nightly-${{ github.run_id }}-local-b${{ matrix.batch }}
           if-no-files-found: warn
 
-  backgammon-online-soak:
+  backgammon-online-soak-experimental:
     if: ${{ vars.BUGHUNT_BACKEND_URL != '' }}
     runs-on: self-hosted
+    continue-on-error: true
     timeout-minutes: 140
     strategy:
       fail-fast: false

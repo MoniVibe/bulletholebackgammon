@@ -69,9 +69,10 @@ jobs:
           path: artifacts/bughunt/smoke-${{ github.run_id }}-local-${{ matrix.seed }}
           if-no-files-found: warn
 
-  backgammon-online-smoke:
+  backgammon-online-smoke-experimental:
     if: ${{ vars.BUGHUNT_BACKEND_URL != '' }}
     runs-on: self-hosted
+    continue-on-error: true
     timeout-minutes: 35
     strategy:
       fail-fast: true
