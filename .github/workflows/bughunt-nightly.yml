@@ -58,6 +58,31 @@ jobs:
           ! grep -q '"eventType":"invariant_failure"' "$LOG"
           ! grep -q 'HOST_CLIENT_DESYNC' "$LOG"
 
+      - name: Summarize local soak batch
+        if: always()
+        shell: bash
+        env:
+          RUN_ID: nightly-${{ github.run_id }}-local-b${{ matrix.batch }}
+        run: |
+          set +e
+          LOG="artifacts/bughunt/$RUN_ID/backgammon/ai/locala.jsonl"
+          completions=0
+          crashes=0
+          invariants=0
+          if [ -f "$LOG" ]; then
+            completions=$(grep -c '"eventType":"session_complete"' "$LOG" || true)
+            crashes=$(grep -c '"eventType":"crash"' "$LOG" || true)
+            invariants=$(grep -c '"eventType":"invariant_failure"' "$LOG" || true)
+          fi
+          {
+            echo "### backgammon-local-soak batch=${{ matrix.batch }}"
+            echo ""
+            echo "- runId: $RUN_ID"
+            echo "- completions: $completions"
+            echo "- crashes: $crashes"
+            echo "- invariantFailures: $invariants"
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Upload local soak artifacts
         if: always()
         uses: actions/upload-artifact@v4
@@ -175,6 +200,42 @@ jobs:
           ! grep -q '"eventType":"invariant_failure"' "$CLIENT_LOG"
           ! grep -q 'HOST_CLIENT_DESYNC' "$HOST_LOG"
           ! grep -q 'HOST_CLIENT_DESYNC' "$CLIENT_LOG"
+
+      - name: Summarize online soak batch
+        if: always()
+        shell: bash
+        env:
+          RUN_ID: nightly-${{ github.run_id }}-online-b${{ matrix.batch }}
+        run: |
+          set +e
+          HOST_LOG="artifacts/bughunt/$RUN_ID/backgammon/online/host.jsonl"
+          CLIENT_LOG="artifacts/bughunt/$RUN_ID/backgammon/online/client.jsonl"
+          host_completions=0
+          client_completions=0
+          host_crashes=0
+          client_crashes=0
+          if [ -f "$HOST_LOG" ]; then
+            host_completions=$(grep -c '"eventType":"session_complete"' "$HOST_LOG" || true)
+            host_crashes=$(grep -c '"eventType":"crash"' "$HOST_LOG" || true)
+          fi
+          if [ -f "$CLIENT_LOG" ]; then
+            client_completions=$(grep -c '"eventType":"session_complete"' "$CLIENT_LOG" || true)
+            client_crashes=$(grep -c '"eventType":"crash"' "$CLIENT_LOG" || true)
+          fi
+          verdict="BLOCKED"
+          if [ "$host_completions" -ge 5 ] && [ "$client_completions" -ge 5 ] && [ "$host_crashes" -eq 0 ] && [ "$client_crashes" -eq 0 ]; then
+            verdict="PASS"
+          fi
+          {
+            echo "### backgammon-online-soak-experimental batch=${{ matrix.batch }}"
+            echo ""
+            echo "- runId: $RUN_ID"
+            echo "- verdict: $verdict"
+            echo "- hostCompletions: $host_completions"
+            echo "- clientCompletions: $client_completions"
+            echo "- hostCrashes: $host_crashes"
+            echo "- clientCrashes: $client_crashes"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload online soak artifacts
         if: always()

@@ -61,6 +61,31 @@ jobs:
           ! grep -q '"eventType":"invariant_failure"' "$LOG"
           ! grep -q 'HOST_CLIENT_DESYNC' "$LOG"
 
+      - name: Summarize local smoke lane
+        if: always()
+        shell: bash
+        env:
+          RUN_ID: smoke-${{ github.run_id }}-local-${{ matrix.seed }}
+        run: |
+          set +e
+          LOG="artifacts/bughunt/$RUN_ID/backgammon/ai/locala.jsonl"
+          completions=0
+          crashes=0
+          invariants=0
+          if [ -f "$LOG" ]; then
+            completions=$(grep -c '"eventType":"session_complete"' "$LOG" || true)
+            crashes=$(grep -c '"eventType":"crash"' "$LOG" || true)
+            invariants=$(grep -c '"eventType":"invariant_failure"' "$LOG" || true)
+          fi
+          {
+            echo "### backgammon-local-smoke seed=${{ matrix.seed }}"
+            echo ""
+            echo "- runId: $RUN_ID"
+            echo "- completions: $completions"
+            echo "- crashes: $crashes"
+            echo "- invariantFailures: $invariants"
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Upload local smoke artifacts
         if: always()
         uses: actions/upload-artifact@v4
@@ -164,6 +189,42 @@ jobs:
           ! grep -q 'HOST_CLIENT_DESYNC' "$HOST_LOG"
           ! grep -q 'HOST_CLIENT_DESYNC' "$CLIENT_LOG"
 
+      - name: Summarize online smoke lane
+        if: always()
+        shell: bash
+        env:
+          RUN_ID: smoke-${{ github.run_id }}-online-${{ matrix.seed }}
+        run: |
+          set +e
+          HOST_LOG="artifacts/bughunt/$RUN_ID/backgammon/online/host.jsonl"
+          CLIENT_LOG="artifacts/bughunt/$RUN_ID/backgammon/online/client.jsonl"
+          host_completions=0
+          client_completions=0
+          host_crashes=0
+          client_crashes=0
+          if [ -f "$HOST_LOG" ]; then
+            host_completions=$(grep -c '"eventType":"session_complete"' "$HOST_LOG" || true)
+            host_crashes=$(grep -c '"eventType":"crash"' "$HOST_LOG" || true)
+          fi
+          if [ -f "$CLIENT_LOG" ]; then
+            client_completions=$(grep -c '"eventType":"session_complete"' "$CLIENT_LOG" || true)
+            client_crashes=$(grep -c '"eventType":"crash"' "$CLIENT_LOG" || true)
+          fi
+          verdict="BLOCKED"
+          if [ "$host_completions" -gt 0 ] && [ "$client_completions" -gt 0 ] && [ "$host_crashes" -eq 0 ] && [ "$client_crashes" -eq 0 ]; then
+            verdict="PASS"
+          fi
+          {
+            echo "### backgammon-online-smoke-experimental seed=${{ matrix.seed }}"
+            echo ""
+            echo "- runId: $RUN_ID"
+            echo "- verdict: $verdict"
+            echo "- hostCompletions: $host_completions"
+            echo "- clientCompletions: $client_completions"
+            echo "- hostCrashes: $host_crashes"
+            echo "- clientCrashes: $client_crashes"
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Upload online smoke artifacts
         if: always()
         uses: actions/upload-artifact@v4
@@ -194,6 +255,17 @@ jobs:
       - name: Run integration smoke under xvfb
         shell: bash
         run: xvfb-run -a flutter test integration_test/backgammon_bughunt_smoke_test.dart
+
+      - name: Summarize integration smoke
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "### backgammon-integration-smoke"
+            echo ""
+            echo "- verdict: completed"
+            echo "- artifactRoot: artifacts/bughunt"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload integration smoke artifacts
         if: always()
@@ -226,10 +298,69 @@ jobs:
         shell: bash
         run: xvfb-run -a flutter test integration_test/backgammon_bughunt_perf_test.dart
 
+      - name: Summarize integration perf
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "### backgammon-integration-perf"
+            echo ""
+            echo "- verdict: completed"
+            echo "- artifactRoot: artifacts/bughunt/perf"
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Upload integration perf artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: backgammon-integration-perf
           path: artifacts/bughunt/perf
+          if-no-files-found: warn
+
+  backgammon-online-integration-smoke-experimental:
+    if: ${{ vars.BUGHUNT_BACKEND_URL != '' }}
+    runs-on: self-hosted
+    continue-on-error: true
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: false
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Run online integration smoke
+        shell: bash
+        env:
+          BACKEND_URL: ${{ vars.BUGHUNT_BACKEND_URL }}
+        run: |
+          set -euo pipefail
+          if command -v xvfb-run >/dev/null 2>&1; then
+            xvfb-run -a flutter test integration_test/backgammon_online_bughunt_smoke_test.dart --dart-define=BUGHUNT_BACKEND_URL="$BACKEND_URL"
+          else
+            flutter test integration_test/backgammon_online_bughunt_smoke_test.dart --dart-define=BUGHUNT_BACKEND_URL="$BACKEND_URL"
+          fi
+
+      - name: Summarize online integration smoke
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "### backgammon-online-integration-smoke-experimental"
+            echo ""
+            echo "- verdict: completed"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload online integration artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backgammon-online-integration-smoke
+          path: artifacts/bughunt
           if-no-files-found: warn
