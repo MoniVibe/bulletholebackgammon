@@ -4,7 +4,9 @@ import 'package:bullethole_shared/bullethole_shared.dart';
 import 'package:flutter/material.dart';
 
 import '../engine/backgammon_online_controller.dart';
+import '../engine/sheshbesh_model.dart';
 import 'app_assets.dart';
+import 'sheshbesh_board_view.dart';
 import 'skin_catalog.dart';
 
 /// Online infrastructure panel for backgammon.
@@ -386,6 +388,15 @@ class _BackgammonOnlinePanelState extends State<BackgammonOnlinePanel> {
             final boardSize = constraints.maxHeight < constraints.maxWidth
                 ? constraints.maxHeight
                 : constraints.maxWidth;
+            final boardSkin = SkinCatalog.backgammonBoardById(
+              SkinCatalog.defaultBackgammonBoardSkinId,
+            );
+            final whitePieceSkin = SkinCatalog.backgammonPieceById(
+              _controller.pieceSkinIdForColor('w'),
+            );
+            final blackPieceSkin = SkinCatalog.backgammonPieceById(
+              _controller.pieceSkinIdForColor('b'),
+            );
             return Center(
               child: SizedBox(
                 width: boardSize,
@@ -393,33 +404,32 @@ class _BackgammonOnlinePanelState extends State<BackgammonOnlinePanel> {
                 child: Stack(
                   children: [
                     Positioned.fill(
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(12),
-                        child: Image.asset(
-                          AppAssets.backgammonBoardPainted,
-                          fit: BoxFit.contain,
-                          filterQuality: FilterQuality.high,
-                          errorBuilder: (context, error, stackTrace) {
-                            return Image.asset(
-                              AppAssets.backgammonBoardClassic,
-                              fit: BoxFit.fill,
-                              filterQuality: FilterQuality.high,
-                              errorBuilder: (context, error, stackTrace) {
-                                return const DecoratedBox(
-                                  decoration: BoxDecoration(
-                                    color: Color(0xFF263238),
-                                  ),
-                                  child: Center(
-                                    child: Text(
-                                      'Board Asset Missing',
-                                      style: TextStyle(color: Colors.white),
-                                    ),
-                                  ),
-                                );
-                              },
-                            );
-                          },
+                      child: SheshBeshBoardView(
+                        points: List<SheshBeshPoint>.generate(
+                          24,
+                          (_) => const SheshBeshPoint(),
+                          growable: false,
                         ),
+                        playerColor: _controller.myColor ?? 'w',
+                        turnColor: _controller.turnColor ?? 'w',
+                        boardSkin: boardSkin,
+                        whitePieceSkin: whitePieceSkin,
+                        blackPieceSkin: blackPieceSkin,
+                        whiteBar: 0,
+                        blackBar: 0,
+                        whiteBorneOff: 0,
+                        blackBorneOff: 0,
+                        selectedPoint: null,
+                        selectedFromBar: false,
+                        playableSourcePoints: const <int>{},
+                        barPlayable: false,
+                        legalTargetPoints: const <int>{},
+                        targetDiceSpentHints: const <int, int>{},
+                        canBearOffTarget: false,
+                        onPointTap: (_) {},
+                        onPointLongPress: (_) {},
+                        onBarTap: () {},
+                        onBearOffTap: () {},
                       ),
                     ),
                     Positioned.fill(
