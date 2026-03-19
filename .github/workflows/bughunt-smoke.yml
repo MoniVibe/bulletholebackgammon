@@ -1,0 +1,234 @@
+name: Bughunt Smoke
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "lib/**"
+      - "tool/**"
+      - "test/**"
+      - "integration_test/**"
+      - "pubspec.yaml"
+      - "pubspec.lock"
+      - ".github/workflows/bughunt-smoke.yml"
+  workflow_dispatch:
+
+jobs:
+  backgammon-local-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: true
+      matrix:
+        seed: [1201, 1202, 1203, 1204, 1205, 1206, 1207, 1208, 1209, 1210]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: false
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Run one local bughunt session
+        shell: bash
+        env:
+          RUN_ID: smoke-${{ github.run_id }}-local-${{ matrix.seed }}
+          BULLETHOLE_LOG_ROOT: ${{ github.workspace }}
+          BULLETHOLE_BUGHUNT_RUN_ID: smoke-${{ github.run_id }}-local-${{ matrix.seed }}
+        run: |
+          set -euo pipefail
+          flutter pub run tool/sheshbesh_ai_duel.dart \
+            --games=1 \
+            --seed=${{ matrix.seed }} \
+            --run-id="$RUN_ID"
+
+      - name: Gate local log
+        shell: bash
+        env:
+          RUN_ID: smoke-${{ github.run_id }}-local-${{ matrix.seed }}
+        run: |
+          set -euo pipefail
+          LOG="artifacts/bughunt/$RUN_ID/backgammon/ai/locala.jsonl"
+          test -f "$LOG"
+          grep -q '"eventType":"session_complete"' "$LOG"
+          ! grep -q '"eventType":"crash"' "$LOG"
+          ! grep -q '"eventType":"invariant_failure"' "$LOG"
+          ! grep -q 'HOST_CLIENT_DESYNC' "$LOG"
+
+      - name: Upload local smoke artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backgammon-local-smoke-${{ matrix.seed }}
+          path: artifacts/bughunt/smoke-${{ github.run_id }}-local-${{ matrix.seed }}
+          if-no-files-found: warn
+
+  backgammon-online-smoke:
+    if: ${{ vars.BUGHUNT_BACKEND_URL != '' }}
+    runs-on: self-hosted
+    timeout-minutes: 35
+    strategy:
+      fail-fast: true
+      matrix:
+        seed: [2201, 2202, 2203, 2204, 2205]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: false
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Run host/client online bughunt session
+        shell: bash
+        env:
+          BACKEND_URL: ${{ vars.BUGHUNT_BACKEND_URL }}
+          RUN_ID: smoke-${{ github.run_id }}-online-${{ matrix.seed }}
+          BULLETHOLE_LOG_ROOT: ${{ github.workspace }}
+          BULLETHOLE_BUGHUNT_RUN_ID: smoke-${{ github.run_id }}-online-${{ matrix.seed }}
+        run: |
+          set -euo pipefail
+          OUT="artifacts/bughunt/$RUN_ID/backgammon/online"
+          mkdir -p "$OUT"
+          HOST_LOG="$OUT/host.jsonl"
+          CLIENT_LOG="$OUT/client.jsonl"
+
+          flutter pub run tool/network_ai_duel_client.dart \
+            --backend-url="$BACKEND_URL" \
+            --name="BackgammonHost-${{ matrix.seed }}" \
+            --cooldown-seconds=0 \
+            --seed=${{ matrix.seed }} \
+            --role=host \
+            --run-id="$RUN_ID" \
+            --log-file="$HOST_LOG" \
+            >"$OUT/host.stdout.log" 2>"$OUT/host.stderr.log" &
+          HOST_PID=$!
+
+          READY=0
+          for _ in $(seq 1 120); do
+            if [ -f "$HOST_LOG" ] && grep -q '"eventType":"session_joined"' "$HOST_LOG"; then
+              READY=1
+              break
+            fi
+            sleep 0.5
+          done
+          if [ "$READY" -ne 1 ]; then
+            kill "$HOST_PID" || true
+            echo "Host did not emit ready event"
+            exit 1
+          fi
+
+          flutter pub run tool/network_ai_duel_client.dart \
+            --backend-url="$BACKEND_URL" \
+            --name="BackgammonClient-${{ matrix.seed }}" \
+            --cooldown-seconds=0 \
+            --seed=${{ matrix.seed }} \
+            --role=client \
+            --run-id="$RUN_ID" \
+            --log-file="$CLIENT_LOG" \
+            >"$OUT/client.stdout.log" 2>"$OUT/client.stderr.log" &
+          CLIENT_PID=$!
+
+          wait "$HOST_PID"
+          wait "$CLIENT_PID"
+
+      - name: Gate online logs
+        shell: bash
+        env:
+          RUN_ID: smoke-${{ github.run_id }}-online-${{ matrix.seed }}
+        run: |
+          set -euo pipefail
+          HOST_LOG="artifacts/bughunt/$RUN_ID/backgammon/online/host.jsonl"
+          CLIENT_LOG="artifacts/bughunt/$RUN_ID/backgammon/online/client.jsonl"
+          test -f "$HOST_LOG"
+          test -f "$CLIENT_LOG"
+          grep -q '"eventType":"session_complete"' "$HOST_LOG"
+          grep -q '"eventType":"session_complete"' "$CLIENT_LOG"
+          ! grep -q '"eventType":"crash"' "$HOST_LOG"
+          ! grep -q '"eventType":"crash"' "$CLIENT_LOG"
+          ! grep -q '"eventType":"invariant_failure"' "$HOST_LOG"
+          ! grep -q '"eventType":"invariant_failure"' "$CLIENT_LOG"
+          ! grep -q 'HOST_CLIENT_DESYNC' "$HOST_LOG"
+          ! grep -q 'HOST_CLIENT_DESYNC' "$CLIENT_LOG"
+
+      - name: Upload online smoke artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backgammon-online-smoke-${{ matrix.seed }}
+          path: artifacts/bughunt/smoke-${{ github.run_id }}-online-${{ matrix.seed }}
+          if-no-files-found: warn
+
+  backgammon-integration-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: false
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Install xvfb
+        run: sudo apt-get update && sudo apt-get install -y xvfb
+
+      - name: Run integration smoke under xvfb
+        shell: bash
+        run: xvfb-run -a flutter test integration_test/backgammon_bughunt_smoke_test.dart
+
+      - name: Upload integration smoke artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backgammon-integration-smoke
+          path: artifacts/bughunt
+          if-no-files-found: warn
+
+  backgammon-integration-perf:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: false
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Install xvfb
+        run: sudo apt-get update && sudo apt-get install -y xvfb
+
+      - name: Run integration perf lane under xvfb
+        shell: bash
+        run: xvfb-run -a flutter test integration_test/backgammon_bughunt_perf_test.dart
+
+      - name: Upload integration perf artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backgammon-integration-perf
+          path: artifacts/bughunt/perf
+          if-no-files-found: warn

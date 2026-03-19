@@ -54,14 +54,12 @@ jobs:
         run: flutter test
 
       - name: AI-vs-AI smoke duel
-        run: dart run tool/ai_duel.dart --games=150 --max-plies=240 --seed=20260226 --conversion-fail-cap-adv=5 --max-conversion-failures=3 --log-file=debug/ci-ai-duel-weird.jsonl --pgn-dir=debug/ci-ai-duel-weird-pgn
+        run: flutter pub run tool/sheshbesh_ai_duel.dart --games=150 --seed=20260226 --run-id=ci-sheshbesh-smoke
 
-      - name: Upload AI duel weird logs
+      - name: Upload AI duel artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ai-duel-weird-logs-smoke
-          path: |
-            debug/ci-ai-duel-weird.jsonl
-            debug/ci-ai-duel-weird-pgn
+          name: sheshbesh-ai-duel-smoke
+          path: artifacts/bughunt/ci-sheshbesh-smoke
           if-no-files-found: warn

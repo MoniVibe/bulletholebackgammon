@@ -24,14 +24,12 @@ jobs:
         run: flutter pub get
 
       - name: AI-vs-AI stress duel
-        run: dart run tool/ai_duel.dart --games=500 --max-plies=260 --seed=20260226 --conversion-fail-cap-adv=5 --max-conversion-failures=14 --log-file=debug/nightly-ai-duel-weird.jsonl --pgn-dir=debug/nightly-ai-duel-weird-pgn
+        run: flutter pub run tool/sheshbesh_ai_duel.dart --games=500 --seed=20260226 --run-id=ci-sheshbesh-nightly
 
-      - name: Upload AI duel weird logs
+      - name: Upload AI duel artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ai-duel-weird-logs-nightly
-          path: |
-            debug/nightly-ai-duel-weird.jsonl
-            debug/nightly-ai-duel-weird-pgn
+          name: sheshbesh-ai-duel-nightly
+          path: artifacts/bughunt/ci-sheshbesh-nightly
           if-no-files-found: warn
