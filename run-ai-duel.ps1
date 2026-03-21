@@ -1,48 +1,77 @@
 [CmdletBinding()]
 param(
-  [int]$Games = 150,
-  [int]$MaxPlies = 240,
-  [int]$ConversionFailCapAdv = 5,
-  [int]$MaxConversionFailures = -1,
+  [int]$Games = 10,
   [int]$Seed = 0,
-  [string]$LogDir = 'debug'
+  [int]$CooldownMs = 300,
+  [int]$AiThinkMinMs = 120,
+  [int]$AiThinkMaxMs = 260,
+  [int]$StepMs = 20,
+  [int]$MaxGameMs = 12000,
+  [int]$MaxStallMs = 2200,
+  [string]$RunId = ''
 )
 
 $ErrorActionPreference = 'Stop'
 
+function Resolve-FlutterExe {
+  param(
+    [string]$Explicit = ''
+  )
+
+  if (-not [string]::IsNullOrWhiteSpace($Explicit) -and (Test-Path $Explicit)) {
+    return $Explicit
+  }
+
+  $fromEnv = $env:BULLETHOLE_FLUTTER_EXE
+  if (-not [string]::IsNullOrWhiteSpace($fromEnv) -and (Test-Path $fromEnv)) {
+    return $fromEnv
+  }
+
+  $fromPath = Get-Command flutter -ErrorAction SilentlyContinue
+  if ($null -ne $fromPath -and -not [string]::IsNullOrWhiteSpace($fromPath.Source)) {
+    return $fromPath.Source
+  }
+
+  $legacy = 'C:\dev\flutter\bin\flutter.bat'
+  if (Test-Path $legacy) {
+    return $legacy
+  }
+
+  throw 'Flutter executable not found. Put `flutter` on PATH or set BULLETHOLE_FLUTTER_EXE.'
+}
+
 if ($Games -le 0) {
   throw 'Games must be greater than 0.'
 }
-if ($MaxPlies -le 0) {
-  throw 'MaxPlies must be greater than 0.'
-}
-if ($ConversionFailCapAdv -le 0) {
-  throw 'ConversionFailCapAdv must be greater than 0.'
-}
-if ($MaxConversionFailures -lt -1) {
-  throw 'MaxConversionFailures must be >= -1.'
-}
-
 $repoRoot = $PSScriptRoot
-$dartDefault = 'C:\dev\flutter\bin\dart.bat'
-$dartExe = if (Test-Path $dartDefault) { $dartDefault } else { 'dart' }
+$dartExe = Resolve-FlutterExe
 
 if ($Seed -le 0) {
   $Seed = Get-Random -Minimum 1 -Maximum 2147483647
 }
 
 $timestamp = Get-Date -Format 'yyyyMMdd-HHmmss'
-$logDirectoryPath = Join-Path $repoRoot $LogDir
-New-Item -ItemType Directory -Path $logDirectoryPath -Force | Out-Null
-$logFilePath = Join-Path $logDirectoryPath "ai-duel-weird-seed-$Seed-$timestamp.jsonl"
+if ([string]::IsNullOrWhiteSpace($RunId)) {
+  $RunId = "sheshbesh-ai-$timestamp"
+}
 
-Write-Host "Running AI duel with seed: $Seed" -ForegroundColor Cyan
-Write-Host "Games: $Games | MaxPlies: $MaxPlies"
-Write-Host "ConversionFailCapAdv: $ConversionFailCapAdv | MaxConversionFailures: $MaxConversionFailures"
-Write-Host "Log file: $logFilePath"
+Write-Host "Running sheshbesh AI duel with seed: $Seed" -ForegroundColor Cyan
+Write-Host "Games: $Games | CooldownMs: $CooldownMs"
+Write-Host "AiThinkMinMs: $AiThinkMinMs | AiThinkMaxMs: $AiThinkMaxMs"
+Write-Host "StepMs: $StepMs | MaxGameMs: $MaxGameMs | MaxStallMs: $MaxStallMs"
+Write-Host "RunId: $RunId"
 Write-Host ''
 
-& $dartExe run tool\ai_duel.dart --games=$Games --max-plies=$MaxPlies --seed=$Seed --conversion-fail-cap-adv=$ConversionFailCapAdv --max-conversion-failures=$MaxConversionFailures --log-file="$logFilePath"
+& $dartExe pub run tool\sheshbesh_ai_duel.dart `
+  --games=$Games `
+  --seed=$Seed `
+  --cooldown-ms=$CooldownMs `
+  --ai-think-min-ms=$AiThinkMinMs `
+  --ai-think-max-ms=$AiThinkMaxMs `
+  --step-ms=$StepMs `
+  --max-game-ms=$MaxGameMs `
+  --max-stall-ms=$MaxStallMs `
+  --run-id="$RunId"
 $exitCode = $LASTEXITCODE
 
 if ($exitCode -ne 0) {

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math';
 
+import 'package:bullethole_shared/bullethole_shared_runtime.dart';
 import 'package:flutter/foundation.dart';
 
 import 'sheshbesh_ai_engine.dart';
@@ -14,9 +15,11 @@ class LocalGameController extends ChangeNotifier {
     this.aiThinkDelayMax = const Duration(milliseconds: 2200),
     SheshBeshAiEngine? aiEngine,
     Random? random,
+    DateTime Function()? nowProvider,
   }) : _random = random ?? Random(),
        _aiEngine = aiEngine ?? SheshBeshAiEngine(random: random ?? Random()),
-       _cooldownDuration = initialCooldownDuration {
+       _cooldownDuration = initialCooldownDuration,
+       _now = nowProvider ?? DateTime.now {
     _resetRuntimeState(activateGame: false);
     _ticker = Timer.periodic(
       const Duration(milliseconds: 200),
@@ -28,6 +31,12 @@ class LocalGameController extends ChangeNotifier {
   final Duration aiThinkDelayMax;
   final Random _random;
   final SheshBeshAiEngine _aiEngine;
+  final DateTime Function() _now;
+  final GameSessionLogger _sessionLogger = GameSessionLogger(
+    applicationId: 'bulletholebackgammon',
+    gameId: 'backgammon',
+    mode: 'local_duel',
+  );
 
   late Timer _ticker;
   Timer? _aiTurnTimer;
@@ -43,7 +52,8 @@ class LocalGameController extends ChangeNotifier {
   String? _pendingExtraRollColor;
   bool _turnTimeoutHandled = false;
 
-  DateTime _turnDeadlineAt = DateTime.now();
+  late DateTime _turnDeadlineAt;
+  int _turnCounter = 0;
 
   String? _winnerColor;
   String? _feedback;
@@ -167,6 +177,13 @@ class LocalGameController extends ChangeNotifier {
     if (cooldownDuration != null) {
       _cooldownDuration = cooldownDuration;
     }
+    _sessionLogger.beginSession(
+      sessionLabel: 'new_game',
+      context: <String, Object?>{
+        'playerAsWhite': playerAsWhite,
+        'cooldownSeconds': _cooldownDuration.inSeconds,
+      },
+    );
 
     _resetRuntimeState(activateGame: true);
 
@@ -179,6 +196,12 @@ class LocalGameController extends ChangeNotifier {
     _startTurnForColor(opening.startingColor);
     _refreshPlayerDecision();
     _maybeScheduleAiTurn();
+    _sessionLogger.logEvent('new_game_started', data: _sessionSnapshot());
+    _sessionLogger.recordStateSnapshot(
+      _sessionSnapshot(),
+      turnIndex: _turnCounter,
+      actionIndexOrPlyIndex: _history.length,
+    );
     notifyListeners();
   }
 
@@ -298,6 +321,10 @@ class LocalGameController extends ChangeNotifier {
 
   @override
   void dispose() {
+    _sessionLogger.closeSession(
+      reason: 'controller_dispose',
+      summary: _sessionSnapshot(),
+    );
     _disposed = true;
     _ticker.cancel();
     _cancelAiTimer();
@@ -409,11 +436,47 @@ class LocalGameController extends ChangeNotifier {
 
     _refreshPlayerDecision();
     _maybeScheduleAiTurn();
+    _sessionLogger.logEvent(
+      'move_applied',
+      data: <String, Object?>{
+        ..._sessionSnapshot(),
+        'moverColor': moverColor,
+        'move': move.describe(moverColor),
+        'actor': actorIsPlayer ? 'player' : 'ai',
+      },
+    );
+    _sessionLogger.logBughuntEvent(
+      'action_applied',
+      payload: <String, Object?>{
+        ..._sessionSnapshot(),
+        'moverColor': moverColor,
+        'move': move.describe(moverColor),
+        'actor': actorIsPlayer ? 'player' : 'ai',
+      },
+      turnIndex: _turnCounter,
+      actionIndexOrPlyIndex: _history.length,
+    );
+    _sessionLogger.recordStateSnapshot(
+      _sessionSnapshot(),
+      turnIndex: _turnCounter,
+      actionIndexOrPlyIndex: _history.length,
+    );
   }
 
   void _completeDiceBatch(String color) {
     final wasTurnColor = color == _turnColor;
     final wasOvertime = color == _overtimeColor;
+    _sessionLogger.logBughuntEvent(
+      'turn_ended',
+      payload: <String, Object?>{
+        'color': color,
+        'wasTurnColor': wasTurnColor,
+        'wasOvertime': wasOvertime,
+        ..._sessionSnapshot(),
+      },
+      turnIndex: _turnCounter,
+      actionIndexOrPlyIndex: _history.length,
+    );
 
     _clearDiceForColor(color);
 
@@ -440,7 +503,7 @@ class LocalGameController extends ChangeNotifier {
       if (_overtimeColor != null && hasActiveDice(_overtimeColor!)) {
         _pendingExtraRollColor = color;
         _turnColor = _overtimeColor!;
-        _turnDeadlineAt = DateTime.now();
+        _turnDeadlineAt = _now();
         _turnTimeoutHandled = true;
         return;
       }
@@ -487,7 +550,7 @@ class LocalGameController extends ChangeNotifier {
 
     // Defensive fallback if opponent already had dice.
     _turnColor = opponent;
-    _turnDeadlineAt = DateTime.now().add(_cooldownDuration);
+    _turnDeadlineAt = _now().add(_cooldownDuration);
     _turnTimeoutHandled = false;
   }
 
@@ -723,16 +786,23 @@ class LocalGameController extends ChangeNotifier {
 
   void _startTurnForColor(String color) {
     _turnColor = color;
-    _turnDeadlineAt = DateTime.now().add(_cooldownDuration);
+    _turnCounter += 1;
+    _turnDeadlineAt = _now().add(_cooldownDuration);
     _turnTimeoutHandled = false;
     _diceByColor[color] = List<int>.from(SheshBeshRules.rollTurnDice(_random));
     _history.add(
       '${_colorLabel(color)} rolls ${_diceByColor[color]!.join(' + ')}',
     );
+    _sessionLogger.logBughuntEvent(
+      'turn_started',
+      payload: <String, Object?>{'color': color, ..._sessionSnapshot()},
+      turnIndex: _turnCounter,
+      actionIndexOrPlyIndex: _history.length,
+    );
   }
 
   Duration _turnRemaining() {
-    final remaining = _turnDeadlineAt.difference(DateTime.now());
+    final remaining = _turnDeadlineAt.difference(_now());
     if (remaining.isNegative) {
       return Duration.zero;
     }
@@ -937,9 +1007,10 @@ class LocalGameController extends ChangeNotifier {
     _diceByColor['w'] = <int>[];
     _diceByColor['b'] = <int>[];
     _turnColor = _playerColor;
+    _turnCounter = 0;
     _overtimeColor = null;
     _pendingExtraRollColor = null;
-    _turnDeadlineAt = DateTime.now();
+    _turnDeadlineAt = _now();
     _turnTimeoutHandled = false;
     _sourceDiceUsageHints = <int, int>{};
     _targetDiceSpentHints = <int, int>{};
@@ -969,6 +1040,27 @@ class LocalGameController extends ChangeNotifier {
     }
     final halfSteps = (ms / 500).ceil();
     return '${(halfSteps / 2).toStringAsFixed(1)}s';
+  }
+
+  Map<String, Object?> _sessionSnapshot() {
+    return <String, Object?>{
+      'turnIndex': _turnCounter,
+      'actionIndexOrPlyIndex': _history.length,
+      'playerColor': _playerColor,
+      'turnColor': _turnColor,
+      'hasActiveGame': _hasActiveGame,
+      'isGameOver': isGameOver,
+      'winnerColor': _winnerColor,
+      'historyLen': _history.length,
+      'diceW': _diceByColor['w']?.join(','),
+      'diceB': _diceByColor['b']?.join(','),
+      'barW': _position.barCount('w'),
+      'barB': _position.barCount('b'),
+      'borneOffW': _position.borneOffCount('w'),
+      'borneOffB': _position.borneOffCount('b'),
+      'feedback': _feedback,
+      'cooldownSeconds': _cooldownDuration.inSeconds,
+    };
   }
 }
 

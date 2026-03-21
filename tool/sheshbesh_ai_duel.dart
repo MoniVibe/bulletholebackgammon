@@ -1,115 +1,91 @@
 // ignore_for_file: avoid_print
 
-import 'dart:async';
+import 'dart:io';
 import 'dart:math';
 
-import 'package:bulletholebackgammon/src/game/engine/local_game_controller.dart';
+import 'package:bullethole_shared/bullethole_shared_runtime.dart';
+
 import 'package:bulletholebackgammon/src/game/engine/sheshbesh_ai_engine.dart';
 import 'package:bulletholebackgammon/src/game/engine/sheshbesh_model.dart';
+import 'package:bulletholebackgammon/src/game/engine/sheshbesh_rules.dart';
 
 const int _checkersPerSide = 15;
 const int _defaultGames = 40;
 const int _defaultSeed = 20260304;
-const int _defaultCooldownMs = 300;
-const int _defaultAiThinkMinMs = 120;
-const int _defaultAiThinkMaxMs = 260;
-const int _defaultStepMs = 20;
-const int _defaultMaxGameMs = 12000;
-const int _defaultMaxStallMs = 2200;
+const int _defaultMaxTurns = 280;
 
 Future<void> main(List<String> args) async {
   final config = _Config.parse(args);
+  final logger = GameSessionLogger(
+    applicationId: 'bulletholebackgammon',
+    gameId: 'backgammon',
+    mode: 'ai',
+    bughuntConfig: BughuntConfig(
+      runId: config.runId ?? 'adhoc_sheshbesh_ai_duel',
+      mode: BughuntMode.ai,
+      role: BughuntRole.localA,
+      seed: config.seed,
+      maxTurns: config.maxTurns,
+    ),
+  );
+  logger.beginSession(
+    sessionLabel: 'sheshbesh_ai_duel',
+    context: <String, Object?>{
+      'games': config.games,
+      'seed': config.seed,
+      'maxTurns': config.maxTurns,
+    },
+  );
+
   final random = Random(config.seed);
+  final aiWhite = SheshBeshAiEngine(random: Random(random.nextInt(1 << 31)));
+  final aiBlack = SheshBeshAiEngine(random: Random(random.nextInt(1 << 31)));
   final failures = <_Failure>[];
 
   var whiteWins = 0;
   var blackWins = 0;
-
-  final runStopwatch = Stopwatch()..start();
+  var draws = 0;
+  var cappedGames = 0;
 
   for (var gameIndex = 1; gameIndex <= config.games; gameIndex++) {
-    final playerAsWhite = random.nextBool();
-    final localRandom = Random(random.nextInt(1 << 31));
-    final playerAi = SheshBeshAiEngine(random: Random(random.nextInt(1 << 31)));
-    final controller = LocalGameController(
-      initialCooldownDuration: Duration(milliseconds: config.cooldownMs),
-      aiThinkDelayMin: Duration(milliseconds: config.aiThinkMinMs),
-      aiThinkDelayMax: Duration(milliseconds: config.aiThinkMaxMs),
-      random: localRandom,
+    logger.logBughuntEvent(
+      'session_joined',
+      payload: <String, Object?>{'gameIndex': gameIndex},
+      turnIndex: 1,
+      actionIndexOrPlyIndex: 0,
     );
 
     try {
-      controller.startNewGame(
-        playerAsWhite: playerAsWhite,
-        cooldownDuration: Duration(milliseconds: config.cooldownMs),
+      final result = _playSingleGame(
+        gameIndex: gameIndex,
+        config: config,
+        random: random,
+        aiWhite: aiWhite,
+        aiBlack: aiBlack,
+        logger: logger,
       );
-
-      final gameStopwatch = Stopwatch()..start();
-      var lastState = _stateSignature(controller);
-      var unchangedForMs = 0;
-
-      while (!controller.isGameOver &&
-          gameStopwatch.elapsedMilliseconds < config.maxGameMs) {
-        _validateControllerState(
-          controller: controller,
-          gameIndex: gameIndex,
-          elapsedMs: gameStopwatch.elapsedMilliseconds,
-        );
-
-        if (controller.canPlayerInteract) {
-          _drivePlayerAi(controller: controller, ai: playerAi);
-        }
-
-        await Future<void>.delayed(Duration(milliseconds: config.stepMs));
-
-        final nextState = _stateSignature(controller);
-        if (nextState == lastState) {
-          unchangedForMs += config.stepMs;
-        } else {
-          unchangedForMs = 0;
-          lastState = nextState;
-        }
-
-        if (unchangedForMs >= config.maxStallMs) {
-          throw StateError(
-            'Stalled for ${unchangedForMs}ms. '
-            'turn=${controller.turnColor} '
-            'diceW=${controller.diceForColor('w')} '
-            'diceB=${controller.diceForColor('b')} '
-            'status="${controller.statusText}"',
-          );
-        }
-      }
-
-      if (!controller.isGameOver) {
-        throw StateError(
-          'Exceeded max game time ${config.maxGameMs}ms without winner. '
-          'turn=${controller.turnColor} '
-          'diceW=${controller.diceForColor('w')} '
-          'diceB=${controller.diceForColor('b')} '
-          'historyTail=${_historyTail(controller.history, 6)}',
-        );
-      }
-
-      if (controller.winnerColor == 'w') {
-        whiteWins += 1;
-      } else if (controller.winnerColor == 'b') {
-        blackWins += 1;
+      switch (result.outcome) {
+        case _GameOutcome.whiteWin:
+          whiteWins += 1;
+          break;
+        case _GameOutcome.blackWin:
+          blackWins += 1;
+          break;
+        case _GameOutcome.draw:
+          draws += 1;
+          break;
+        case _GameOutcome.capped:
+          cappedGames += 1;
+          break;
       }
     } catch (error) {
-      failures.add(
-        _Failure(
-          gameIndex: gameIndex,
-          message: error.toString(),
-          turnColor: controller.turnColor,
-          playerColor: controller.playerColor,
-          diceWhite: controller.diceForColor('w'),
-          diceBlack: controller.diceForColor('b'),
-          historyTail: _historyTail(controller.history, 8),
-        ),
+      final failure = _Failure(gameIndex: gameIndex, message: error.toString());
+      failures.add(failure);
+      logger.recordInvariantFailure(
+        failureCode: invariantSessionTerminationInvalid,
+        message: failure.message,
+        context: <String, Object?>{'gameIndex': gameIndex},
       );
-    } finally {
-      controller.dispose();
     }
   }
 
@@ -117,144 +93,211 @@ Future<void> main(List<String> args) async {
   print('  games: ${config.games}');
   print('  white wins: $whiteWins');
   print('  black wins: $blackWins');
-  print('  draws/unfinished: ${config.games - whiteWins - blackWins}');
+  print('  draws: $draws');
+  print('  capped games: $cappedGames');
   print('  failures: ${failures.length}');
   print('  seed: ${config.seed}');
-  print('  runtimeMs: ${runStopwatch.elapsedMilliseconds}');
+  print('  max turns: ${config.maxTurns}');
 
   if (failures.isNotEmpty) {
     print('');
     print('Failures:');
     for (final failure in failures) {
-      print(
-        '  game=${failure.gameIndex} turn=${failure.turnColor} '
-        'player=${failure.playerColor} '
-        'diceW=${failure.diceWhite} diceB=${failure.diceBlack}',
-      );
-      print('    ${failure.message}');
-      print('    historyTail=${failure.historyTail.join(' | ')}');
+      print('  game=${failure.gameIndex}: ${failure.message}');
     }
+    logger.closeSession(
+      reason: 'failed',
+      summary: <String, Object?>{
+        'games': config.games,
+        'whiteWins': whiteWins,
+        'blackWins': blackWins,
+        'draws': draws,
+        'cappedGames': cappedGames,
+        'failures': failures.length,
+      },
+    );
     throw StateError('AI duel failed with ${failures.length} failure(s).');
   }
-}
 
-void _drivePlayerAi({
-  required LocalGameController controller,
-  required SheshBeshAiEngine ai,
-}) {
-  final position = _snapshotPosition(controller);
-  final color = controller.playerColor;
-  final dice = controller.diceForColor(color);
-  if (dice.isEmpty) {
-    return;
-  }
-
-  final beforeHistoryCount = controller.history.length;
-  final move = ai.chooseMove(position: position, color: color, dice: dice);
-
-  if (move == null) {
-    _playFirstLegalThroughUi(controller);
-    return;
-  }
-
-  _applyMoveThroughUi(controller, move);
-
-  // Fallback when chosen move is no longer applicable due dynamic overlap.
-  if (controller.history.length == beforeHistoryCount) {
-    _playFirstLegalThroughUi(controller);
-  }
-}
-
-void _applyMoveThroughUi(LocalGameController controller, SheshBeshMove move) {
-  if (move.source == SheshBeshMoveSource.bar) {
-    controller.tapBar();
-  } else if (move.fromPoint != null) {
-    controller.tapPoint(move.fromPoint!);
-  }
-
-  if (move.bearsOff) {
-    controller.tapBearOff();
-    return;
-  }
-
-  if (move.toPoint != null) {
-    controller.tapPoint(move.toPoint!);
-  }
-}
-
-void _playFirstLegalThroughUi(LocalGameController controller) {
-  final before = controller.history.length;
-
-  if (controller.canEnterFromBar) {
-    controller.tapBar();
-    if (controller.canBearOffTarget) {
-      controller.tapBearOff();
-      if (controller.history.length > before) {
-        return;
-      }
-    }
-    final targets = controller.legalTargetPoints.toList()..sort();
-    if (targets.isNotEmpty) {
-      controller.tapPoint(targets.first);
-    }
-    return;
-  }
-
-  final sources = controller.playableSourcePoints.toList()..sort();
-  for (final source in sources) {
-    controller.tapPoint(source);
-    if (controller.canBearOffTarget) {
-      controller.tapBearOff();
-      if (controller.history.length > before) {
-        return;
-      }
-    }
-    final targets = controller.legalTargetPoints.toList()..sort();
-    if (targets.isEmpty) {
-      continue;
-    }
-    controller.tapPoint(targets.first);
-    if (controller.history.length > before) {
-      return;
-    }
-  }
-}
-
-SheshBeshPosition _snapshotPosition(LocalGameController controller) {
-  final points = List<SheshBeshPoint>.generate(24, (index) {
-    final point = controller.points[index];
-    return SheshBeshPoint(color: point.color, count: point.count);
-  }, growable: false);
-  return SheshBeshPosition(
-    points: points,
-    whiteBar: controller.barCount('w'),
-    blackBar: controller.barCount('b'),
-    whiteBorneOff: controller.borneOffCount('w'),
-    blackBorneOff: controller.borneOffCount('b'),
+  logger.closeSession(
+    reason: 'completed',
+    summary: <String, Object?>{
+      'games': config.games,
+      'whiteWins': whiteWins,
+      'blackWins': blackWins,
+      'draws': draws,
+      'cappedGames': cappedGames,
+      'failures': 0,
+    },
   );
 }
 
-void _validateControllerState({
-  required LocalGameController controller,
+_GameResult _playSingleGame({
   required int gameIndex,
-  required int elapsedMs,
+  required _Config config,
+  required Random random,
+  required SheshBeshAiEngine aiWhite,
+  required SheshBeshAiEngine aiBlack,
+  required GameSessionLogger logger,
+}) {
+  var position = SheshBeshRules.initialPosition();
+  final opening = SheshBeshRules.determineOpeningStarter(random);
+  var turnColor = opening.startingColor;
+  var actionIndex = 0;
+
+  for (var turnIndex = 1; turnIndex <= config.maxTurns; turnIndex++) {
+    final dice = SheshBeshRules.rollTurnDice(random).toList(growable: true);
+    logger.logBughuntEvent(
+      'turn_started',
+      payload: <String, Object?>{
+        'gameIndex': gameIndex,
+        'turnColor': turnColor,
+        'dice': List<int>.from(dice),
+      },
+      turnIndex: turnIndex,
+      actionIndexOrPlyIndex: actionIndex,
+    );
+
+    while (dice.isNotEmpty) {
+      final ai = turnColor == 'w' ? aiWhite : aiBlack;
+      final decision = SheshBeshRules.computeTurnDecision(
+        position: position,
+        color: turnColor,
+        dice: dice,
+      );
+      if (!decision.hasMoves) {
+        break;
+      }
+
+      final move = ai.chooseMove(
+        position: position,
+        color: turnColor,
+        dice: dice,
+      );
+      if (move == null) {
+        throw StateError(
+          'No move returned for color=$turnColor with legal moves present.',
+        );
+      }
+      if (!_containsMove(decision.legalMoves, move)) {
+        throw StateError(
+          'AI selected illegal move for color=$turnColor die=${move.die}.',
+        );
+      }
+
+      position = SheshBeshRules.applyMove(
+        position: position,
+        color: turnColor,
+        move: move,
+      );
+      _consumeDie(dice, move.die);
+      actionIndex += 1;
+
+      _validatePosition(
+        position: position,
+        gameIndex: gameIndex,
+        turnIndex: turnIndex,
+      );
+      logger.logBughuntEvent(
+        'action_applied',
+        payload: <String, Object?>{
+          'gameIndex': gameIndex,
+          'actorColor': turnColor,
+          'turnColor': turnColor,
+          'move': move.describe(turnColor),
+          'die': move.die,
+          'diceRemaining': List<int>.from(dice),
+        },
+        turnIndex: turnIndex,
+        actionIndexOrPlyIndex: actionIndex,
+      );
+
+      final winner = SheshBeshRules.winnerColor(position);
+      if (winner != null) {
+        logger.recordStateSnapshot(
+          _snapshot(position, gameIndex: gameIndex, turnColor: turnColor),
+          turnIndex: turnIndex,
+          actionIndexOrPlyIndex: actionIndex,
+        );
+        logger.logBughuntEvent(
+          'turn_ended',
+          payload: <String, Object?>{
+            'gameIndex': gameIndex,
+            'turnColor': turnColor,
+            'winnerColor': winner,
+          },
+          turnIndex: turnIndex,
+          actionIndexOrPlyIndex: actionIndex,
+        );
+        return _GameResult(
+          outcome: winner == 'w'
+              ? _GameOutcome.whiteWin
+              : _GameOutcome.blackWin,
+        );
+      }
+    }
+
+    logger.recordStateSnapshot(
+      _snapshot(position, gameIndex: gameIndex, turnColor: turnColor),
+      turnIndex: turnIndex,
+      actionIndexOrPlyIndex: actionIndex,
+    );
+    logger.logBughuntEvent(
+      'turn_ended',
+      payload: <String, Object?>{
+        'gameIndex': gameIndex,
+        'turnColor': turnColor,
+      },
+      turnIndex: turnIndex,
+      actionIndexOrPlyIndex: actionIndex,
+    );
+    turnColor = SheshBeshRules.oppositeColor(turnColor);
+  }
+
+  return const _GameResult(outcome: _GameOutcome.capped);
+}
+
+bool _containsMove(List<SheshBeshMove> legalMoves, SheshBeshMove candidate) {
+  for (final move in legalMoves) {
+    if (move.source == candidate.source &&
+        move.fromPoint == candidate.fromPoint &&
+        move.toPoint == candidate.toPoint &&
+        move.bearsOff == candidate.bearsOff &&
+        move.die == candidate.die) {
+      return true;
+    }
+  }
+  return false;
+}
+
+void _consumeDie(List<int> dice, int die) {
+  final index = dice.indexOf(die);
+  if (index < 0) {
+    throw StateError('Consumed die $die not found in remaining dice $dice.');
+  }
+  dice.removeAt(index);
+}
+
+void _validatePosition({
+  required SheshBeshPosition position,
+  required int gameIndex,
+  required int turnIndex,
 }) {
   int totalFor(String color) {
-    var total = controller.barCount(color) + controller.borneOffCount(color);
-    for (final point in controller.points) {
-      if (point.color == color) {
-        total += point.count;
-      }
+    var total = position.barCount(color) + position.borneOffCount(color);
+    for (final point in position.points) {
       if (point.count < 0) {
         throw StateError(
-          'Negative stack count at game=$gameIndex elapsedMs=$elapsedMs',
+          'Negative stack count at game=$gameIndex turn=$turnIndex',
         );
       }
-      if (point.count > 0 && (point.color != 'w' && point.color != 'b')) {
+      if (point.count > 0 && point.color != 'w' && point.color != 'b') {
         throw StateError(
-          'Invalid stack color "${point.color}" '
-          'at game=$gameIndex elapsedMs=$elapsedMs',
+          'Invalid stack color "${point.color}" at game=$gameIndex turn=$turnIndex',
         );
+      }
+      if (point.color == color) {
+        total += point.count;
       }
     }
     return total;
@@ -264,67 +307,71 @@ void _validateControllerState({
   final blackTotal = totalFor('b');
   if (whiteTotal != _checkersPerSide || blackTotal != _checkersPerSide) {
     throw StateError(
-      'Checker conservation broken at game=$gameIndex elapsedMs=$elapsedMs '
+      'Checker conservation broken at game=$gameIndex turn=$turnIndex '
       '(white=$whiteTotal black=$blackTotal)',
     );
   }
 }
 
-String _stateSignature(LocalGameController controller) {
-  final buffer = StringBuffer()
-    ..write('turn=${controller.turnColor};')
-    ..write('wDice=${controller.diceForColor('w').join(',')};')
-    ..write('bDice=${controller.diceForColor('b').join(',')};')
-    ..write('wBar=${controller.barCount('w')};')
-    ..write('bBar=${controller.barCount('b')};')
-    ..write('wOff=${controller.borneOffCount('w')};')
-    ..write('bOff=${controller.borneOffCount('b')};')
-    ..write('hist=${controller.history.length};');
-
-  for (final point in controller.points) {
-    buffer.write('${point.color ?? '_'}${point.count}|');
-  }
-
-  return buffer.toString();
+Map<String, Object?> _snapshot(
+  SheshBeshPosition position, {
+  required int gameIndex,
+  required String turnColor,
+}) {
+  return <String, Object?>{
+    'gameIndex': gameIndex,
+    'turnColor': turnColor,
+    'whiteBar': position.whiteBar,
+    'blackBar': position.blackBar,
+    'whiteBorneOff': position.whiteBorneOff,
+    'blackBorneOff': position.blackBorneOff,
+    'points': position.points
+        .asMap()
+        .entries
+        .map(
+          (entry) => <String, Object?>{
+            'index': entry.key,
+            'color': entry.value.color,
+            'count': entry.value.count,
+          },
+        )
+        .toList(growable: false),
+  };
 }
 
-List<String> _historyTail(List<String> history, int count) {
-  if (history.length <= count) {
-    return List<String>.from(history);
-  }
-  return history.sublist(history.length - count);
+enum _GameOutcome { whiteWin, blackWin, draw, capped }
+
+class _GameResult {
+  const _GameResult({required this.outcome});
+
+  final _GameOutcome outcome;
+}
+
+class _Failure {
+  const _Failure({required this.gameIndex, required this.message});
+
+  final int gameIndex;
+  final String message;
 }
 
 class _Config {
   const _Config({
     required this.games,
     required this.seed,
-    required this.cooldownMs,
-    required this.aiThinkMinMs,
-    required this.aiThinkMaxMs,
-    required this.stepMs,
-    required this.maxGameMs,
-    required this.maxStallMs,
+    required this.maxTurns,
+    required this.runId,
   });
 
   final int games;
   final int seed;
-  final int cooldownMs;
-  final int aiThinkMinMs;
-  final int aiThinkMaxMs;
-  final int stepMs;
-  final int maxGameMs;
-  final int maxStallMs;
+  final int maxTurns;
+  final String? runId;
 
   static _Config parse(List<String> args) {
     var games = _defaultGames;
     var seed = _defaultSeed;
-    var cooldownMs = _defaultCooldownMs;
-    var aiThinkMinMs = _defaultAiThinkMinMs;
-    var aiThinkMaxMs = _defaultAiThinkMaxMs;
-    var stepMs = _defaultStepMs;
-    var maxGameMs = _defaultMaxGameMs;
-    var maxStallMs = _defaultMaxStallMs;
+    var maxTurns = _defaultMaxTurns;
+    String? runId;
 
     for (final arg in args) {
       if (arg.startsWith('--games=')) {
@@ -335,30 +382,30 @@ class _Config {
         seed = int.parse(arg.substring('--seed='.length));
         continue;
       }
-      if (arg.startsWith('--cooldown-ms=')) {
-        cooldownMs = int.parse(arg.substring('--cooldown-ms='.length));
-        continue;
-      }
-      if (arg.startsWith('--ai-think-min-ms=')) {
-        aiThinkMinMs = int.parse(arg.substring('--ai-think-min-ms='.length));
-        continue;
-      }
-      if (arg.startsWith('--ai-think-max-ms=')) {
-        aiThinkMaxMs = int.parse(arg.substring('--ai-think-max-ms='.length));
-        continue;
-      }
-      if (arg.startsWith('--step-ms=')) {
-        stepMs = int.parse(arg.substring('--step-ms='.length));
+      if (arg.startsWith('--max-turns=')) {
+        maxTurns = int.parse(arg.substring('--max-turns='.length));
         continue;
       }
       if (arg.startsWith('--max-game-ms=')) {
-        maxGameMs = int.parse(arg.substring('--max-game-ms='.length));
+        // Compatibility alias from older controller-based runner.
+        final ms = int.parse(arg.substring('--max-game-ms='.length));
+        maxTurns = max(1, ms ~/ 40);
         continue;
       }
-      if (arg.startsWith('--max-stall-ms=')) {
-        maxStallMs = int.parse(arg.substring('--max-stall-ms='.length));
+      if (arg.startsWith('--run-id=')) {
+        runId = arg.substring('--run-id='.length).trim();
         continue;
       }
+
+      // Compatibility no-op flags from the previous implementation.
+      if (arg.startsWith('--cooldown-ms=') ||
+          arg.startsWith('--ai-think-min-ms=') ||
+          arg.startsWith('--ai-think-max-ms=') ||
+          arg.startsWith('--step-ms=') ||
+          arg.startsWith('--max-stall-ms=')) {
+        continue;
+      }
+
       if (arg == '--help' || arg == '-h') {
         _printUsageAndExit();
       }
@@ -368,64 +415,18 @@ class _Config {
     if (games <= 0) {
       throw ArgumentError('--games must be > 0');
     }
-    if (cooldownMs <= 0) {
-      throw ArgumentError('--cooldown-ms must be > 0');
-    }
-    if (aiThinkMinMs <= 0 || aiThinkMaxMs <= 0) {
-      throw ArgumentError(
-        '--ai-think-min-ms and --ai-think-max-ms must be > 0',
-      );
-    }
-    if (aiThinkMaxMs < aiThinkMinMs) {
-      throw ArgumentError('--ai-think-max-ms must be >= --ai-think-min-ms');
-    }
-    if (stepMs <= 0 || maxGameMs <= 0 || maxStallMs <= 0) {
-      throw ArgumentError(
-        '--step-ms, --max-game-ms and --max-stall-ms must be > 0',
-      );
+    if (maxTurns <= 0) {
+      throw ArgumentError('--max-turns must be > 0');
     }
 
-    return _Config(
-      games: games,
-      seed: seed,
-      cooldownMs: cooldownMs,
-      aiThinkMinMs: aiThinkMinMs,
-      aiThinkMaxMs: aiThinkMaxMs,
-      stepMs: stepMs,
-      maxGameMs: maxGameMs,
-      maxStallMs: maxStallMs,
-    );
+    return _Config(games: games, seed: seed, maxTurns: maxTurns, runId: runId);
   }
-}
-
-class _Failure {
-  const _Failure({
-    required this.gameIndex,
-    required this.message,
-    required this.turnColor,
-    required this.playerColor,
-    required this.diceWhite,
-    required this.diceBlack,
-    required this.historyTail,
-  });
-
-  final int gameIndex;
-  final String message;
-  final String turnColor;
-  final String playerColor;
-  final List<int> diceWhite;
-  final List<int> diceBlack;
-  final List<String> historyTail;
 }
 
 Never _printUsageAndExit() {
   print(
-    'Usage: dart run tool/sheshbesh_ai_duel.dart '
-    '[--games=N] [--seed=N] [--cooldown-ms=N] '
-    '[--ai-think-min-ms=N] [--ai-think-max-ms=N] '
-    '[--step-ms=N] [--max-game-ms=N] [--max-stall-ms=N]',
+    'Usage: flutter pub run tool/sheshbesh_ai_duel.dart '
+    '[--games=40] [--seed=20260304] [--max-turns=280] [--run-id=id]',
   );
-  throw _UsageExit();
+  exit(0);
 }
-
-class _UsageExit implements Exception {}

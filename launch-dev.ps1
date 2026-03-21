@@ -9,10 +9,36 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
+function Resolve-FlutterExe {
+  param(
+    [string]$Explicit = ''
+  )
+
+  if (-not [string]::IsNullOrWhiteSpace($Explicit) -and (Test-Path $Explicit)) {
+    return $Explicit
+  }
+
+  $fromEnv = $env:BULLETHOLE_FLUTTER_EXE
+  if (-not [string]::IsNullOrWhiteSpace($fromEnv) -and (Test-Path $fromEnv)) {
+    return $fromEnv
+  }
+
+  $fromPath = Get-Command flutter -ErrorAction SilentlyContinue
+  if ($null -ne $fromPath -and -not [string]::IsNullOrWhiteSpace($fromPath.Source)) {
+    return $fromPath.Source
+  }
+
+  $legacy = 'C:\dev\flutter\bin\flutter.bat'
+  if (Test-Path $legacy) {
+    return $legacy
+  }
+
+  throw 'Flutter executable not found. Put `flutter` on PATH or set BULLETHOLE_FLUTTER_EXE.'
+}
+
 $repoRoot = $PSScriptRoot
 $backendDir = Join-Path $repoRoot 'multiplayer_node_server'
-$flutterDefault = 'C:\dev\flutter\bin\flutter.bat'
-$flutterExe = if (Test-Path $flutterDefault) { $flutterDefault } else { 'flutter' }
+$flutterExe = Resolve-FlutterExe
 $backendAvailable = Test-Path $backendDir
 
 if (-not $backendAvailable -and -not $SkipBackend) {

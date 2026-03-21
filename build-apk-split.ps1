@@ -6,16 +6,35 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-$repoRoot = $PSScriptRoot
-$flutterDefault = 'C:\dev\flutter\bin\flutter.bat'
+function Resolve-FlutterExe {
+  param(
+    [string]$Explicit = ''
+  )
 
-if ($FlutterExe -and $FlutterExe.Trim().Length -gt 0) {
-  $flutter = $FlutterExe
-} elseif (Test-Path $flutterDefault) {
-  $flutter = $flutterDefault
-} else {
-  $flutter = 'flutter'
+  if (-not [string]::IsNullOrWhiteSpace($Explicit) -and (Test-Path $Explicit)) {
+    return $Explicit
+  }
+
+  $fromEnv = $env:BULLETHOLE_FLUTTER_EXE
+  if (-not [string]::IsNullOrWhiteSpace($fromEnv) -and (Test-Path $fromEnv)) {
+    return $fromEnv
+  }
+
+  $fromPath = Get-Command flutter -ErrorAction SilentlyContinue
+  if ($null -ne $fromPath -and -not [string]::IsNullOrWhiteSpace($fromPath.Source)) {
+    return $fromPath.Source
+  }
+
+  $legacy = 'C:\dev\flutter\bin\flutter.bat'
+  if (Test-Path $legacy) {
+    return $legacy
+  }
+
+  throw 'Flutter executable not found. Put `flutter` on PATH or set BULLETHOLE_FLUTTER_EXE.'
 }
+
+$repoRoot = $PSScriptRoot
+$flutter = Resolve-FlutterExe -Explicit $FlutterExe
 
 if ($Clean) {
   Write-Host 'Running flutter clean...' -ForegroundColor Cyan

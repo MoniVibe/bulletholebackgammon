@@ -4,7 +4,9 @@ import 'package:bullethole_shared/bullethole_shared.dart';
 import 'package:flutter/material.dart';
 
 import '../engine/backgammon_online_controller.dart';
+import '../engine/sheshbesh_model.dart';
 import 'app_assets.dart';
+import 'sheshbesh_board_view.dart';
 import 'skin_catalog.dart';
 
 /// Online infrastructure panel for backgammon.
@@ -43,6 +45,7 @@ class _BackgammonOnlinePanelState extends State<BackgammonOnlinePanel> {
   late final BackgammonOnlineController _controller;
   late final TextEditingController _apiBaseController;
   late final TextEditingController _nameController;
+  late final ScrollController _matchSettingsScrollController;
 
   bool _menuOpen = true;
   bool _connecting = false;
@@ -56,11 +59,13 @@ class _BackgammonOnlinePanelState extends State<BackgammonOnlinePanel> {
     _controller = BackgammonOnlineController();
     _apiBaseController = TextEditingController(text: _defaultBackendUrl);
     _nameController = TextEditingController(text: 'Player');
+    _matchSettingsScrollController = ScrollController();
     _checkBackendHealth();
   }
 
   @override
   void dispose() {
+    _matchSettingsScrollController.dispose();
     _apiBaseController.dispose();
     _nameController.dispose();
     _controller.dispose();
@@ -104,144 +109,155 @@ class _BackgammonOnlinePanelState extends State<BackgammonOnlinePanel> {
                         },
                       )
                     : null,
-                child: Column(
-                  children: [
-                    TextField(
-                      controller: _apiBaseController,
-                      decoration: const InputDecoration(
-                        labelText: 'Backend URL',
-                        hintText: 'https://your-backend.example.com',
-                        border: OutlineInputBorder(),
-                        isDense: true,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    TextField(
-                      controller: _nameController,
-                      decoration: const InputDecoration(
-                        labelText: 'Display Name',
-                        border: OutlineInputBorder(),
-                        isDense: true,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    DropdownButtonFormField<int>(
-                      initialValue: _selectedCooldownSeconds,
-                      decoration: const InputDecoration(
-                        labelText: 'Cooldown (seconds)',
-                        border: OutlineInputBorder(),
-                        isDense: true,
-                      ),
-                      items: _cooldownOptionsSeconds
-                          .map(
-                            (seconds) => DropdownMenuItem<int>(
-                              value: seconds,
-                              child: Text('$seconds s'),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxHeight: 320),
+                  child: Scrollbar(
+                    controller: _matchSettingsScrollController,
+                    thumbVisibility: true,
+                    child: SingleChildScrollView(
+                      controller: _matchSettingsScrollController,
+                      child: Column(
+                        children: [
+                          TextField(
+                            controller: _apiBaseController,
+                            decoration: const InputDecoration(
+                              labelText: 'Backend URL',
+                              hintText: 'https://your-backend.example.com',
+                              border: OutlineInputBorder(),
+                              isDense: true,
                             ),
-                          )
-                          .toList(growable: false),
-                      onChanged: connected
-                          ? null
-                          : (value) {
+                          ),
+                          const SizedBox(height: 8),
+                          TextField(
+                            controller: _nameController,
+                            decoration: const InputDecoration(
+                              labelText: 'Display Name',
+                              border: OutlineInputBorder(),
+                              isDense: true,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          DropdownButtonFormField<int>(
+                            initialValue: _selectedCooldownSeconds,
+                            decoration: const InputDecoration(
+                              labelText: 'Cooldown (seconds)',
+                              border: OutlineInputBorder(),
+                              isDense: true,
+                            ),
+                            items: _cooldownOptionsSeconds
+                                .map(
+                                  (seconds) => DropdownMenuItem<int>(
+                                    value: seconds,
+                                    child: Text('$seconds s'),
+                                  ),
+                                )
+                                .toList(growable: false),
+                            onChanged: connected
+                                ? null
+                                : (value) {
+                                    if (value == null) {
+                                      return;
+                                    }
+                                    setState(() {
+                                      _selectedCooldownSeconds = value;
+                                    });
+                                  },
+                          ),
+                          const SizedBox(height: 8),
+                          DropdownButtonFormField<String>(
+                            key: ValueKey<String>(
+                              'bg_online_skin_$_selectedPlayerSkinId',
+                            ),
+                            initialValue: _selectedPlayerSkinId,
+                            decoration: const InputDecoration(
+                              labelText: 'Player Skin',
+                              border: OutlineInputBorder(),
+                              isDense: true,
+                            ),
+                            items: _backgammonPieceSkinDropdownItems(),
+                            onChanged: (value) {
                               if (value == null) {
                                 return;
                               }
                               setState(() {
-                                _selectedCooldownSeconds = value;
+                                _selectedPlayerSkinId = value;
                               });
+                              _controller.setMyPieceSkin(value);
                             },
-                    ),
-                    const SizedBox(height: 8),
-                    DropdownButtonFormField<String>(
-                      key: ValueKey<String>(
-                        'bg_online_skin_$_selectedPlayerSkinId',
-                      ),
-                      initialValue: _selectedPlayerSkinId,
-                      decoration: const InputDecoration(
-                        labelText: 'Player Skin',
-                        border: OutlineInputBorder(),
-                        isDense: true,
-                      ),
-                      items: _backgammonPieceSkinDropdownItems(),
-                      onChanged: (value) {
-                        if (value == null) {
-                          return;
-                        }
-                        setState(() {
-                          _selectedPlayerSkinId = value;
-                        });
-                        _controller.setMyPieceSkin(value);
-                      },
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: FilledButton.icon(
-                            onPressed: canStart ? _findMatch : null,
-                            icon: const AppAssetIcon(
-                              AppAssets.newGameIcon,
-                              fallbackIcon: Icons.groups_2_outlined,
-                              size: 18,
+                          ),
+                          const SizedBox(height: 8),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: FilledButton.icon(
+                                  onPressed: canStart ? _findMatch : null,
+                                  icon: const AppAssetIcon(
+                                    AppAssets.newGameIcon,
+                                    fallbackIcon: Icons.groups_2_outlined,
+                                    size: 18,
+                                  ),
+                                  label: const Text('Find Match'),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: OutlinedButton(
+                                  onPressed: connected ? _disconnect : null,
+                                  child: const Text('Disconnect'),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          _BackendHealthCard(
+                            state: _controller.backendHealthState,
+                            message: _controller.backendHealthMessage,
+                            checkedAt: _controller.backendHealthCheckedAt,
+                            busy: _backendActionInFlight,
+                            onCheckPressed: _checkBackendHealth,
+                            onWakePressed: _wakeBackend,
+                          ),
+                          const SizedBox(height: 8),
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: [
+                                OutlinedButton.icon(
+                                  onPressed: connected
+                                      ? () => _controller.requestNewGame(
+                                          cooldownSeconds:
+                                              _selectedCooldownSeconds,
+                                        )
+                                      : null,
+                                  icon: const AppAssetIcon(
+                                    AppAssets.rematchIcon,
+                                    fallbackIcon: Icons.replay,
+                                    size: 18,
+                                  ),
+                                  label: const Text('Request New Game'),
+                                ),
+                                OutlinedButton.icon(
+                                  onPressed: () => _pullServerLogs(),
+                                  icon: const Icon(
+                                    Icons.description_outlined,
+                                    size: 18,
+                                  ),
+                                  label: const Text('Pull Server Logs'),
+                                ),
+                                OutlinedButton.icon(
+                                  onPressed: _controller.clearDebugLog,
+                                  icon: const Icon(Icons.clear_all, size: 18),
+                                  label: const Text('Clear Log'),
+                                ),
+                              ],
                             ),
-                            label: const Text('Find Match'),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: OutlinedButton(
-                            onPressed: connected ? _disconnect : null,
-                            child: const Text('Disconnect'),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    _BackendHealthCard(
-                      state: _controller.backendHealthState,
-                      message: _controller.backendHealthMessage,
-                      checkedAt: _controller.backendHealthCheckedAt,
-                      busy: _backendActionInFlight,
-                      onCheckPressed: _checkBackendHealth,
-                      onWakePressed: _wakeBackend,
-                    ),
-                    const SizedBox(height: 8),
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: [
-                          OutlinedButton.icon(
-                            onPressed: connected
-                                ? () => _controller.requestNewGame(
-                                    cooldownSeconds: _selectedCooldownSeconds,
-                                  )
-                                : null,
-                            icon: const AppAssetIcon(
-                              AppAssets.rematchIcon,
-                              fallbackIcon: Icons.replay,
-                              size: 18,
-                            ),
-                            label: const Text('Request New Game'),
-                          ),
-                          OutlinedButton.icon(
-                            onPressed: () => _pullServerLogs(),
-                            icon: const Icon(
-                              Icons.description_outlined,
-                              size: 18,
-                            ),
-                            label: const Text('Pull Server Logs'),
-                          ),
-                          OutlinedButton.icon(
-                            onPressed: _controller.clearDebugLog,
-                            icon: const Icon(Icons.clear_all, size: 18),
-                            label: const Text('Clear Log'),
                           ),
                         ],
                       ),
                     ),
-                  ],
+                  ),
                 ),
               ),
               const SizedBox(height: 10),
@@ -372,6 +388,15 @@ class _BackgammonOnlinePanelState extends State<BackgammonOnlinePanel> {
             final boardSize = constraints.maxHeight < constraints.maxWidth
                 ? constraints.maxHeight
                 : constraints.maxWidth;
+            final boardSkin = SkinCatalog.backgammonBoardById(
+              SkinCatalog.defaultBackgammonBoardSkinId,
+            );
+            final whitePieceSkin = SkinCatalog.backgammonPieceById(
+              _controller.pieceSkinIdForColor('w'),
+            );
+            final blackPieceSkin = SkinCatalog.backgammonPieceById(
+              _controller.pieceSkinIdForColor('b'),
+            );
             return Center(
               child: SizedBox(
                 width: boardSize,
@@ -379,33 +404,32 @@ class _BackgammonOnlinePanelState extends State<BackgammonOnlinePanel> {
                 child: Stack(
                   children: [
                     Positioned.fill(
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(12),
-                        child: Image.asset(
-                          AppAssets.backgammonBoardPainted,
-                          fit: BoxFit.contain,
-                          filterQuality: FilterQuality.high,
-                          errorBuilder: (context, error, stackTrace) {
-                            return Image.asset(
-                              AppAssets.backgammonBoardClassic,
-                              fit: BoxFit.fill,
-                              filterQuality: FilterQuality.high,
-                              errorBuilder: (context, error, stackTrace) {
-                                return const DecoratedBox(
-                                  decoration: BoxDecoration(
-                                    color: Color(0xFF263238),
-                                  ),
-                                  child: Center(
-                                    child: Text(
-                                      'Board Asset Missing',
-                                      style: TextStyle(color: Colors.white),
-                                    ),
-                                  ),
-                                );
-                              },
-                            );
-                          },
+                      child: SheshBeshBoardView(
+                        points: List<SheshBeshPoint>.generate(
+                          24,
+                          (_) => const SheshBeshPoint(),
+                          growable: false,
                         ),
+                        playerColor: _controller.myColor ?? 'w',
+                        turnColor: _controller.turnColor ?? 'w',
+                        boardSkin: boardSkin,
+                        whitePieceSkin: whitePieceSkin,
+                        blackPieceSkin: blackPieceSkin,
+                        whiteBar: 0,
+                        blackBar: 0,
+                        whiteBorneOff: 0,
+                        blackBorneOff: 0,
+                        selectedPoint: null,
+                        selectedFromBar: false,
+                        playableSourcePoints: const <int>{},
+                        barPlayable: false,
+                        legalTargetPoints: const <int>{},
+                        targetDiceSpentHints: const <int, int>{},
+                        canBearOffTarget: false,
+                        onPointTap: (_) {},
+                        onPointLongPress: (_) {},
+                        onBarTap: () {},
+                        onBearOffTap: () {},
                       ),
                     ),
                     Positioned.fill(
