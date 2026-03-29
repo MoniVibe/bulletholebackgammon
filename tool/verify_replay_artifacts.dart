@@ -9,7 +9,9 @@ void main(List<String> args) {
   final root = Directory(rootPath);
   if (!root.existsSync()) {
     if (config.allowEmpty) {
-      stdout.writeln('Replay artifact root does not exist, skipping: $rootPath');
+      stdout.writeln(
+        'Replay artifact root does not exist, skipping: $rootPath',
+      );
       return;
     }
     stderr.writeln('Replay artifact root does not exist: $rootPath');
@@ -83,7 +85,9 @@ void main(List<String> args) {
     exit(1);
   }
 
-  stdout.writeln('Verified ${traces.length} replay trace summaries under $rootPath');
+  stdout.writeln(
+    'Verified ${traces.length} replay trace summaries under $rootPath',
+  );
 }
 
 void _requireField(
@@ -153,11 +157,7 @@ Map<String, Object?> _asStringKeyedMap(dynamic raw) {
 }
 
 class _Config {
-  const _Config({
-    required this.rootPath,
-    required this.allowEmpty,
-    this.runId,
-  });
+  const _Config({required this.rootPath, required this.allowEmpty, this.runId});
 
   final String rootPath;
   final String? runId;

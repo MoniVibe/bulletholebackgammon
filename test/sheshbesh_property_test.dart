@@ -11,13 +11,16 @@ void main() {
     }
   });
 
-  test('same seed replays to identical terminal fingerprint and state sequence', () {
-    const seed = 1729;
-    final first = _simulate(seed: seed, maxTurns: 220);
-    final second = _simulate(seed: seed, maxTurns: 220);
-    expect(first.finalFingerprint, second.finalFingerprint);
-    expect(first.stateSequence, second.stateSequence);
-  });
+  test(
+    'same seed replays to identical terminal fingerprint and state sequence',
+    () {
+      const seed = 1729;
+      final first = _simulate(seed: seed, maxTurns: 220);
+      final second = _simulate(seed: seed, maxTurns: 220);
+      expect(first.finalFingerprint, second.finalFingerprint);
+      expect(first.stateSequence, second.stateSequence);
+    },
+  );
 }
 
 _SimulationResult _simulate({required int seed, required int maxTurns}) {
@@ -43,7 +46,10 @@ _SimulationResult _simulate({required int seed, required int maxTurns}) {
       color: color,
       dice: remainingDice,
     );
-    expect(turnDecision.maxMovesUsable, lessThanOrEqualTo(remainingDice.length));
+    expect(
+      turnDecision.maxMovesUsable,
+      lessThanOrEqualTo(remainingDice.length),
+    );
     expect(turnDecision.maxUsedPips, greaterThanOrEqualTo(0));
     var usedMoveCount = 0;
     var usedPips = 0;
@@ -60,7 +66,8 @@ _SimulationResult _simulate({required int seed, required int maxTurns}) {
         break;
       }
 
-      final move = decision.legalMoves[random.nextInt(decision.legalMoves.length)];
+      final move =
+          decision.legalMoves[random.nextInt(decision.legalMoves.length)];
       final dieIndex = remainingDice.indexOf(move.die);
       expect(
         dieIndex,
@@ -110,7 +117,10 @@ _SimulationResult _simulate({required int seed, required int maxTurns}) {
   }
 
   return _SimulationResult(
-    finalFingerprint: _positionFingerprint(position: position, sideToMove: color),
+    finalFingerprint: _positionFingerprint(
+      position: position,
+      sideToMove: color,
+    ),
     stateSequence: stateSequence,
   );
 }
@@ -143,13 +153,22 @@ void _expectNoNegativeCounts(SheshBeshPosition position) {
 void _expectWinnerConsistency(SheshBeshPosition position) {
   final winner = SheshBeshRules.winnerColor(position);
   if (winner == null) {
-    expect(position.whiteBorneOff < SheshBeshRules.totalCheckersPerSide, isTrue);
-    expect(position.blackBorneOff < SheshBeshRules.totalCheckersPerSide, isTrue);
+    expect(
+      position.whiteBorneOff < SheshBeshRules.totalCheckersPerSide,
+      isTrue,
+    );
+    expect(
+      position.blackBorneOff < SheshBeshRules.totalCheckersPerSide,
+      isTrue,
+    );
     return;
   }
   if (winner == 'w') {
     expect(position.whiteBorneOff, SheshBeshRules.totalCheckersPerSide);
-    expect(position.blackBorneOff < SheshBeshRules.totalCheckersPerSide, isTrue);
+    expect(
+      position.blackBorneOff < SheshBeshRules.totalCheckersPerSide,
+      isTrue,
+    );
     return;
   }
   expect(position.blackBorneOff, SheshBeshRules.totalCheckersPerSide);

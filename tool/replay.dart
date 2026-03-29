@@ -43,7 +43,10 @@ Map<String, Object?> _buildSummary({
 }) {
   final lines = trace.readAsLinesSync();
 
-  String? commitSha = _firstEnv(<String>['BULLETHOLE_COMMIT_SHA', 'GITHUB_SHA']);
+  String? commitSha = _firstEnv(<String>[
+    'BULLETHOLE_COMMIT_SHA',
+    'GITHUB_SHA',
+  ]);
   String? workflowRunId = _firstEnv(<String>['GITHUB_RUN_ID']);
   int? seed = config.seed ?? _seedFromPath(trace.path);
   String? runId = config.runId;
@@ -76,13 +79,11 @@ Map<String, Object?> _buildSummary({
     eventCount += 1;
 
     final payload = _asStringKeyedMap(event['payload']);
-    final eventType = _pickString(event, <String>[
-          'eventType',
-          'event_type',
-          'event',
-        ]) ??
+    final eventType =
+        _pickString(event, <String>['eventType', 'event_type', 'event']) ??
         _pickString(payload, <String>['eventType', 'event_type', 'event']);
-    final severity = _pickString(event, <String>['severity']) ??
+    final severity =
+        _pickString(event, <String>['severity']) ??
         _pickString(payload, <String>['severity']);
 
     commitSha ??= _pickString(event, <String>[
@@ -98,19 +99,27 @@ Map<String, Object?> _buildSummary({
     ]);
     workflowRunId ??= _pickString(payload, <String>['workflow_run_id']);
 
-    seed ??= _pickInt(event, <String>['seed']) ?? _pickInt(payload, <String>['seed']);
-    runId ??= _pickString(event, <String>['runId', 'run_id']) ??
+    seed ??=
+        _pickInt(event, <String>['seed']) ??
+        _pickInt(payload, <String>['seed']);
+    runId ??=
+        _pickString(event, <String>['runId', 'run_id']) ??
         _pickString(payload, <String>['runId', 'run_id']);
 
-    terminalResult ??= _pickString(payload, <String>['result', 'terminalResult']);
+    terminalResult ??= _pickString(payload, <String>[
+      'result',
+      'terminalResult',
+    ]);
     terminalResult ??= _pickString(event, <String>['result', 'terminalResult']);
     terminalStatus ??=
         _pickString(payload, <String>['status', 'terminalStatus']) ??
-            _pickString(event, <String>['status', 'terminalStatus']);
-    winner ??= _pickString(payload, <String>['winner', 'winnerColor']) ??
+        _pickString(event, <String>['status', 'terminalStatus']);
+    winner ??=
+        _pickString(payload, <String>['winner', 'winnerColor']) ??
         _pickString(event, <String>['winner', 'winnerColor']);
 
-    final stateHash = _pickString(event, <String>['stateHash', 'state_hash']) ??
+    final stateHash =
+        _pickString(event, <String>['stateHash', 'state_hash']) ??
         _pickString(payload, <String>[
           'stateHash',
           'state_hash',
@@ -135,8 +144,9 @@ Map<String, Object?> _buildSummary({
       ]);
       failureTurn =
           _pickInt(event, <String>['turnIndex', 'turn_index']) ??
-              _pickInt(payload, <String>['turnIndex', 'turn_index']);
-      currentPlayerAtFailure = _pickString(payload, <String>[
+          _pickInt(payload, <String>['turnIndex', 'turn_index']);
+      currentPlayerAtFailure =
+          _pickString(payload, <String>[
             'turnColor',
             'actorColor',
             'color',
@@ -171,7 +181,8 @@ Map<String, Object?> _buildSummary({
     'trace_path': tracePath,
     'state_hash_before':
         stateHashBeforeFailure ?? previousStateHash ?? fallbackBeforeHash,
-    'state_hash_after': stateHashAfterFailure ?? lastStateHash ?? fallbackAfterHash,
+    'state_hash_after':
+        stateHashAfterFailure ?? lastStateHash ?? fallbackAfterHash,
     'failure_type': failureType ?? 'none',
     'action_index_or_ply_index': failureIndex,
     'turn_index': failureTurn,
