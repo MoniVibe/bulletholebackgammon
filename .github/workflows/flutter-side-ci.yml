@@ -57,17 +57,17 @@ jobs:
           PUREFLUTTER_REPO_TOKEN: ${{ secrets.PUREFLUTTER_REPO_TOKEN }}
         run: |
           set -euo pipefail
-          if git ls-remote https://github.com/meshik/pureflutter.git HEAD >/dev/null 2>&1; then
-            echo "Anonymous access to meshik/pureflutter is available."
+          if git ls-remote https://github.com/MoniVibe/pureflutter.git HEAD >/dev/null 2>&1; then
+            echo "Anonymous access to MoniVibe/pureflutter is available."
             exit 0
           fi
           if [ -z "${PUREFLUTTER_REPO_TOKEN:-}" ]; then
             echo "::error::Anonymous git access failed and PUREFLUTTER_REPO_TOKEN is missing."
-            echo "::error::Add PUREFLUTTER_REPO_TOKEN with read access to meshik/pureflutter."
+            echo "::error::Add PUREFLUTTER_REPO_TOKEN with read access to MoniVibe/pureflutter."
             exit 1
           fi
-          if ! git ls-remote "https://x-access-token:${PUREFLUTTER_REPO_TOKEN}@github.com/meshik/pureflutter.git" HEAD >/dev/null 2>&1; then
-            echo "::error::PUREFLUTTER_REPO_TOKEN cannot read meshik/pureflutter."
+          if ! git ls-remote "https://x-access-token:${PUREFLUTTER_REPO_TOKEN}@github.com/MoniVibe/pureflutter.git" HEAD >/dev/null 2>&1; then
+            echo "::error::PUREFLUTTER_REPO_TOKEN cannot read MoniVibe/pureflutter."
             echo "::error::Use a token owned by an account that can open that repo, and ensure org SSO/token approval is completed if required."
             exit 1
           fi
