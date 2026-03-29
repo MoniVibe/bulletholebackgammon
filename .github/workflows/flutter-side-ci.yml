@@ -95,12 +95,110 @@ jobs:
         run: flutter test
 
       - name: AI-vs-AI smoke duel
-        run: flutter pub run tool/sheshbesh_ai_duel.dart --games=150 --seed=20260226 --run-id=ci-sheshbesh-smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          RUN_ID="ci-sheshbesh-smoke-${{ github.run_id }}"
+          LOG_FILE="artifacts/bughunt/$RUN_ID/backgammon/ai/locala.jsonl"
+          mkdir -p debug
+
+          set +e
+          timeout --signal=TERM 12m flutter pub run tool/sheshbesh_ai_duel.dart \
+            --games=150 \
+            --seed=20260226 \
+            --run-id="$RUN_ID"
+          exit_code=$?
+          set -e
+
+          reason="success"
+          if [ "$exit_code" -eq 124 ] || [ "$exit_code" -eq 137 ]; then
+            reason="timeout"
+          elif [ "$exit_code" -ne 0 ]; then
+            reason="command_failed"
+          fi
+
+          sessions=0
+          crashes=0
+          invariants=0
+          conversions=0
+          if [ -f "$LOG_FILE" ]; then
+            sessions=$(grep -c '"eventType":"session_complete"' "$LOG_FILE" || true)
+            crashes=$(grep -c '"eventType":"crash"' "$LOG_FILE" || true)
+            invariants=$(grep -c '"eventType":"invariant_failure"' "$LOG_FILE" || true)
+            conversions=$(grep -c '"eventType":"conversion_failure"' "$LOG_FILE" || true)
+            if [ "$crashes" -gt 0 ]; then
+              reason="crash"
+            fi
+            if [ "$invariants" -gt 0 ]; then
+              reason="invariant_failure"
+            fi
+            if [ "$conversions" -gt 0 ]; then
+              reason="conversion_failures"
+            fi
+          fi
+
+          if [ "$sessions" -lt 1 ] && [ "$reason" = "success" ]; then
+            reason="missing_session_complete"
+          fi
+
+          cat >debug/ci-sheshbesh-duel-summary.json <<EOF
+          {
+            "run_id": "$RUN_ID",
+            "reason": "$reason",
+            "exit_code": $exit_code,
+            "sessions": $sessions,
+            "crashes": $crashes,
+            "invariant_failures": $invariants,
+            "conversion_failures": $conversions,
+            "log_file": "$LOG_FILE"
+          }
+          EOF
+
+          {
+            echo "### sheshbesh-ai-duel-smoke"
+            echo ""
+            echo "- run_id: $RUN_ID"
+            echo "- reason: $reason"
+            echo "- exit_code: $exit_code"
+            echo "- sessions: $sessions"
+            echo "- crashes: $crashes"
+            echo "- invariant_failures: $invariants"
+            echo "- conversion_failures: $conversions"
+          } >>"$GITHUB_STEP_SUMMARY"
+
+          if [ "$reason" != "success" ]; then
+            echo "::error::AI duel smoke failed: $reason"
+            exit 1
+          fi
+
+      - name: Replay verification for AI duel artifacts
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          RUN_ID="ci-sheshbesh-smoke-${{ github.run_id }}"
+          LOG_ROOT="artifacts/bughunt/$RUN_ID/backgammon/ai"
+          LOG_FILE="$LOG_ROOT/locala.jsonl"
+          SUMMARY_FILE="$LOG_ROOT/locala.summary.json"
+          if [ ! -s "$LOG_FILE" ]; then
+            echo "::error::No AI duel log produced at $LOG_FILE"
+            exit 1
+          fi
+          flutter pub run tool/replay.dart \
+            --trace="$LOG_FILE" \
+            --run-id="$RUN_ID" \
+            --seed=20260226 \
+            --output="$SUMMARY_FILE"
+          flutter pub run tool/verify_replay_artifacts.dart \
+            --run-id="$RUN_ID" \
+            --no-allow-empty
 
       - name: Upload AI duel artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: sheshbesh-ai-duel-smoke
-          path: artifacts/bughunt/ci-sheshbesh-smoke
+          path: |
+            artifacts/bughunt/ci-sheshbesh-smoke-${{ github.run_id }}
+            debug/ci-sheshbesh-duel-summary.json
           if-no-files-found: warn
