@@ -405,7 +405,7 @@ jobs:
 
       - name: Run integration smoke under xvfb
         shell: bash
-        run: xvfb-run -a flutter test integration_test/backgammon_bughunt_smoke_test.dart
+        run: xvfb-run -a flutter test -d linux integration_test/backgammon_bughunt_smoke_test.dart
 
       - name: Summarize integration smoke
         if: always()
@@ -488,7 +488,7 @@ jobs:
 
       - name: Run integration perf lane under xvfb
         shell: bash
-        run: xvfb-run -a flutter test integration_test/backgammon_bughunt_perf_test.dart
+        run: xvfb-run -a flutter test -d linux integration_test/backgammon_bughunt_perf_test.dart
 
       - name: Summarize integration perf
         if: always()
@@ -575,9 +575,9 @@ jobs:
         run: |
           set -euo pipefail
           if command -v xvfb-run >/dev/null 2>&1; then
-            xvfb-run -a flutter test integration_test/backgammon_online_bughunt_smoke_test.dart --dart-define=BUGHUNT_BACKEND_URL="$BACKEND_URL"
+            xvfb-run -a flutter test -d linux integration_test/backgammon_online_bughunt_smoke_test.dart --dart-define=BUGHUNT_BACKEND_URL="$BACKEND_URL"
           else
-            flutter test integration_test/backgammon_online_bughunt_smoke_test.dart --dart-define=BUGHUNT_BACKEND_URL="$BACKEND_URL"
+            flutter test -d linux integration_test/backgammon_online_bughunt_smoke_test.dart --dart-define=BUGHUNT_BACKEND_URL="$BACKEND_URL"
           fi
 
       - name: Summarize online integration smoke
