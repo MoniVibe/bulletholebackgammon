@@ -103,7 +103,7 @@ jobs:
           mkdir -p debug
 
           set +e
-          timeout --signal=TERM 12m flutter pub run tool/sheshbesh_ai_duel.dart \
+          timeout --signal=TERM --kill-after=30s 12m flutter pub run tool/sheshbesh_ai_duel.dart \
             --games=150 \
             --seed=20260226 \
             --run-id="$RUN_ID"
