@@ -75,6 +75,16 @@ jobs:
 
       - name: Install dependencies
         run: flutter pub get
+      - name: Cleanup tokenized Git auth
+        if: always()
+        shell: bash
+        run: |
+          keys="$(git config --global --name-only --get-regexp '^url\.https://x-access-token:.*@github\.com/\.insteadof$' || true)"
+          if [ -n "$keys" ]; then
+            while IFS= read -r key; do
+              [ -n "$key" ] && git config --global --unset-all "$key" || true
+            done <<< "$keys"
+          fi
       - name: Verify formatting
         run: dart format --output=none --set-exit-if-changed lib test tool
 
