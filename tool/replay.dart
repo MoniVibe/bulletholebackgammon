@@ -11,6 +11,10 @@ void main(List<String> args) {
 
   var hadFailure = false;
   for (final trace in traces) {
+    if (trace.lengthSync() == 0) {
+      stdout.writeln('Skipping empty trace: ${trace.path}');
+      continue;
+    }
     try {
       final summary = _buildSummary(trace: trace, config: config);
       final outputPath = config.tracePath != null && config.outputPath != null
@@ -38,13 +42,10 @@ Map<String, Object?> _buildSummary({
   required _Config config,
 }) {
   final lines = trace.readAsLinesSync();
-  if (lines.isEmpty) {
-    throw StateError('Trace is empty: ${trace.path}');
-  }
 
   String? commitSha = _firstEnv(<String>['BULLETHOLE_COMMIT_SHA', 'GITHUB_SHA']);
   String? workflowRunId = _firstEnv(<String>['GITHUB_RUN_ID']);
-  int? seed = config.seed;
+  int? seed = config.seed ?? _seedFromPath(trace.path);
   String? runId = config.runId;
   String? terminalResult;
   String? terminalStatus;
@@ -59,6 +60,8 @@ Map<String, Object?> _buildSummary({
   String? lastStateHash;
   String? stateHashBeforeFailure;
   String? stateHashAfterFailure;
+  String? firstEventLine;
+  String? lastEventLine;
 
   var eventCount = 0;
   for (var i = 0; i < lines.length; i += 1) {
@@ -66,6 +69,8 @@ Map<String, Object?> _buildSummary({
     if (line.isEmpty) {
       continue;
     }
+    firstEventLine ??= line;
+    lastEventLine = line;
     final decoded = jsonDecode(line);
     final event = _asStringKeyedMap(decoded);
     eventCount += 1;
@@ -150,6 +155,12 @@ Map<String, Object?> _buildSummary({
   }
 
   final tracePath = trace.absolute.path;
+  final fallbackBeforeHash = firstEventLine == null
+      ? null
+      : _stableHash(firstEventLine);
+  final fallbackAfterHash = lastEventLine == null
+      ? null
+      : _stableHash(lastEventLine);
   final summary = <String, Object?>{
     'summary_version': 1,
     'generated_at': DateTime.now().toUtc().toIso8601String(),
@@ -158,8 +169,9 @@ Map<String, Object?> _buildSummary({
     'seed': seed,
     'run_id': runId,
     'trace_path': tracePath,
-    'state_hash_before': stateHashBeforeFailure ?? previousStateHash,
-    'state_hash_after': stateHashAfterFailure ?? lastStateHash,
+    'state_hash_before':
+        stateHashBeforeFailure ?? previousStateHash ?? fallbackBeforeHash,
+    'state_hash_after': stateHashAfterFailure ?? lastStateHash ?? fallbackAfterHash,
     'failure_type': failureType ?? 'none',
     'action_index_or_ply_index': failureIndex,
     'turn_index': failureTurn,
@@ -319,6 +331,25 @@ String _fileName(String path) {
     return normalized;
   }
   return normalized.substring(index + 1);
+}
+
+int? _seedFromPath(String path) {
+  final fileName = _fileName(path);
+  final match = RegExp(r'(\d+)(?=\.jsonl$)').firstMatch(fileName);
+  if (match == null) {
+    return null;
+  }
+  return int.tryParse(match.group(1)!);
+}
+
+String _stableHash(String input) {
+  var hash = 0xcbf29ce484222325;
+  const prime = 0x100000001b3;
+  for (final codeUnit in input.codeUnits) {
+    hash ^= codeUnit;
+    hash = (hash * prime) & 0xffffffffffffffff;
+  }
+  return hash.toRadixString(16).padLeft(16, '0');
 }
 
 class _Config {

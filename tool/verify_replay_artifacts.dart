@@ -19,6 +19,9 @@ void main(List<String> args) {
   final traces = <File>[];
   for (final entity in root.listSync(recursive: true)) {
     if (entity is File && entity.path.toLowerCase().endsWith('.jsonl')) {
+      if (entity.lengthSync() == 0) {
+        continue;
+      }
       traces.add(entity);
     }
   }
