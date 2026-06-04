@@ -39,6 +39,9 @@ class SheshBeshAiEngine {
       }
     }
 
+    if (bestMoves.isEmpty) {
+      return null;
+    }
     return bestMoves[_random.nextInt(bestMoves.length)];
   }
 
