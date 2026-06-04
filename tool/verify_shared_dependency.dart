@@ -1,6 +1,6 @@
 import 'dart:io';
 
-const _expectedUrl = 'https://github.com/gammula/pureflutter.git';
+const _expectedUrl = 'https://github.com/MoniVibe/pureflutter.git';
 const _disallowedRefs = <String>{'main', 'master', 'head', 'HEAD'};
 
 Never fail(String message) {
