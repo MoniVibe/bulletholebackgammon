@@ -83,6 +83,19 @@ class _BackgammonOnlinePanelState extends State<BackgammonOnlinePanel> {
         final tailHistory = history.length > 8
             ? history.sublist(history.length - 8)
             : history;
+        final trailingChildren = <Widget>[
+          DebugLogExportButton(
+            logTextProvider: _controller.exportDebugLog,
+            iconOnly: true,
+          ),
+          if (widget.showModeSwitch)
+            CompactModeSwitch(
+              onlineSelected: widget.isOnlineMode,
+              onChanged: (selected) {
+                widget.onModeChanged?.call(selected);
+              },
+            ),
+        ];
 
         return Padding(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
@@ -101,14 +114,10 @@ class _BackgammonOnlinePanelState extends State<BackgammonOnlinePanel> {
                   fallbackIcon: Icons.settings,
                   size: 22,
                 ),
-                trailing: widget.showModeSwitch
-                    ? CompactModeSwitch(
-                        onlineSelected: widget.isOnlineMode,
-                        onChanged: (selected) {
-                          widget.onModeChanged?.call(selected);
-                        },
-                      )
-                    : null,
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: trailingChildren,
+                ),
                 child: ConstrainedBox(
                   constraints: const BoxConstraints(maxHeight: 320),
                   child: Scrollbar(

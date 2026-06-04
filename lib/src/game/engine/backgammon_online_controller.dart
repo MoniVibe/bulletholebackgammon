@@ -115,6 +115,8 @@ class BackgammonOnlineController extends ChangeNotifier {
   List<String> get debugLogEntries =>
       List.unmodifiable(_debugLogEntries.reversed.toList(growable: false));
 
+  String exportDebugLog() => _sessionLogger.exportLatestSessionJsonl();
+
   String pieceSkinIdForColor(String color) {
     return _pieceSkinByColor[color] ?? _defaultPieceSkinId;
   }

@@ -213,6 +213,10 @@ class _GameScreenState extends State<GameScreen> {
               fallbackIcon: Icons.settings,
               size: 22,
             ),
+            trailing: DebugLogExportButton(
+              logTextProvider: _controller.exportDebugLog,
+              iconOnly: true,
+            ),
             child: Column(
               children: [
                 DropdownButtonFormField<int>(

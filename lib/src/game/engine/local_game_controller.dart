@@ -153,6 +153,8 @@ class LocalGameController extends ChangeNotifier {
 
   List<String> get history => List<String>.unmodifiable(_history);
 
+  String exportDebugLog() => _sessionLogger.exportLatestSessionJsonl();
+
   bool get canPlayerInteract {
     return _hasActiveGame && !isGameOver && _isColorAllowedToMove(_playerColor);
   }
