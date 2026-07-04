@@ -397,12 +397,23 @@ class _Config {
         continue;
       }
 
-      // Compatibility no-op flags from the previous implementation.
-      if (arg.startsWith('--cooldown-ms=') ||
-          arg.startsWith('--ai-think-min-ms=') ||
-          arg.startsWith('--ai-think-max-ms=') ||
-          arg.startsWith('--step-ms=') ||
+      // DEPRECATED NO-OP timing flags, kept only so old invocations don't
+      // error. This runner is a PURE SEQUENTIAL rules-engine duel (one side
+      // moves at a time); it has no timers, no cooldown, and no interleaving.
+      // These flags describe a timed/concurrent model that does not exist
+      // here, so they are silently ignored — they do NOT make the duel test
+      // timed or concurrent. Real coverage for the concurrent OVERTIME path
+      // (both colours live on the shared board at once) lives in
+      // test/local_game_controller_overtime_conservation_test.dart, which
+      // drives LocalGameController with real timers and asserts checker
+      // conservation across the dual-live window. Do not add these flags to
+      // new call sites expecting them to have any effect.
+      if (arg.startsWith('--cooldown-ms=') || // no-op (deprecated)
+          arg.startsWith('--ai-think-min-ms=') || // no-op (deprecated)
+          arg.startsWith('--ai-think-max-ms=') || // no-op (deprecated)
+          arg.startsWith('--step-ms=') || // no-op (deprecated)
           arg.startsWith('--max-stall-ms=')) {
+        // no-op (deprecated)
         continue;
       }
 
