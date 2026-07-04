@@ -12,6 +12,36 @@ void main() {
   });
 
   test(
+    'seeded sweep actually exercises hits, bar entries and bear-offs',
+    () {
+      // Guards against the invariant sweep silently passing on transition
+      // types it never reaches: if a refactor stopped generating hits/bar
+      // entries/bear-offs, the conservation checks would still be "green" but
+      // meaningless. Require the whole sweep to touch each transition type.
+      var totalHits = 0;
+      var totalBarEntries = 0;
+      var totalBearOffs = 0;
+      for (var seed = 1; seed <= 25; seed += 1) {
+        final result = _simulate(seed: seed, maxTurns: 220);
+        totalHits += result.hitCount;
+        totalBarEntries += result.barEntryCount;
+        totalBearOffs += result.bearOffCount;
+      }
+      expect(totalHits, greaterThan(0), reason: 'no hit-to-bar ever exercised');
+      expect(
+        totalBarEntries,
+        greaterThan(0),
+        reason: 'no bar re-entry ever exercised',
+      );
+      expect(
+        totalBearOffs,
+        greaterThan(0),
+        reason: 'no bear-off ever exercised',
+      );
+    },
+  );
+
+  test(
     'same seed replays to identical terminal fingerprint and state sequence',
     () {
       const seed = 1729;
@@ -30,6 +60,9 @@ _SimulationResult _simulate({required int seed, required int maxTurns}) {
   final stateSequence = <String>[
     _positionFingerprint(position: position, sideToMove: color),
   ];
+  var hitCount = 0;
+  var barEntryCount = 0;
+  var bearOffCount = 0;
 
   for (var turn = 0; turn < maxTurns; turn += 1) {
     _expectCheckerConservation(position);
@@ -75,6 +108,16 @@ _SimulationResult _simulate({required int seed, required int maxTurns}) {
         reason: 'seed=$seed turn=$turn selected move consumed missing die',
       );
       remainingDice.removeAt(dieIndex);
+
+      if (move.hitsOpponent) {
+        hitCount += 1;
+      }
+      if (move.source == SheshBeshMoveSource.bar) {
+        barEntryCount += 1;
+      }
+      if (move.bearsOff) {
+        bearOffCount += 1;
+      }
 
       position = SheshBeshRules.applyMove(
         position: position,
@@ -122,6 +165,9 @@ _SimulationResult _simulate({required int seed, required int maxTurns}) {
       sideToMove: color,
     ),
     stateSequence: stateSequence,
+    hitCount: hitCount,
+    barEntryCount: barEntryCount,
+    bearOffCount: bearOffCount,
   );
 }
 
@@ -210,8 +256,14 @@ class _SimulationResult {
   const _SimulationResult({
     required this.finalFingerprint,
     required this.stateSequence,
+    this.hitCount = 0,
+    this.barEntryCount = 0,
+    this.bearOffCount = 0,
   });
 
   final String finalFingerprint;
   final List<String> stateSequence;
+  final int hitCount;
+  final int barEntryCount;
+  final int bearOffCount;
 }
