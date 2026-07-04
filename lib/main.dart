@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'src/game/engine/backgammon_online_controller.dart';
 import 'src/game/ui/game_screen.dart';
 
 void main() {
@@ -7,7 +8,12 @@ void main() {
 }
 
 class BulletholeBackgammonApp extends StatelessWidget {
-  const BulletholeBackgammonApp({super.key});
+  const BulletholeBackgammonApp({super.key, this.onlineControllerFactory});
+
+  /// Test-only seam forwarded to [GameScreen] so widget tests can supply a
+  /// controller with a stubbed HTTP client. Null in production.
+  @visibleForTesting
+  final BackgammonOnlineController Function()? onlineControllerFactory;
 
   @override
   Widget build(BuildContext context) {
@@ -73,7 +79,7 @@ class BulletholeBackgammonApp extends StatelessWidget {
           ),
         ),
       ),
-      home: const GameScreen(),
+      home: GameScreen(onlineControllerFactory: onlineControllerFactory),
     );
   }
 }

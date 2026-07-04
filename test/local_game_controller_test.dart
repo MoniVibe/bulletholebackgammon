@@ -1,5 +1,7 @@
 import 'dart:math';
 
+import 'package:clock/clock.dart';
+import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:bulletholebackgammon/src/game/engine/local_game_controller.dart';
@@ -36,13 +38,13 @@ void main() {
     );
   });
 
-  test(
-    'timeout unlocks opponent without removing timed-out side dice',
-    () async {
+  test('timeout unlocks opponent without removing timed-out side dice', () {
+    fakeAsync((async) {
       final controller = LocalGameController(
         initialCooldownDuration: const Duration(milliseconds: 250),
         aiThinkDelayMin: const Duration(days: 1),
         aiThinkDelayMax: const Duration(days: 1),
+        nowProvider: () => clock.now(),
         random: _FixedRandom(<int>[
           5, 1, // opening roll -> white starts
           1, 1, // white opening dice
@@ -55,7 +57,9 @@ void main() {
       expect(controller.diceForColor('w').length, 4);
       expect(controller.diceForColor('b'), isEmpty);
 
-      await Future<void>.delayed(const Duration(milliseconds: 520));
+      // Advance past the 250ms cooldown so the periodic ticker fires the
+      // timeout handler deterministically.
+      async.elapse(const Duration(milliseconds: 520));
 
       expect(controller.diceForColor('w').length, 4);
       expect(controller.diceForColor('b'), isNotEmpty);
@@ -64,66 +68,73 @@ void main() {
         isTrue,
       );
       expect(controller.canPlayerInteract, isTrue);
-    },
-  );
-
-  test('opponent finishing first waits for timed-out side leftovers', () async {
-    final controller = LocalGameController(
-      initialCooldownDuration: const Duration(milliseconds: 350),
-      aiThinkDelayMin: const Duration(days: 1),
-      aiThinkDelayMax: const Duration(days: 1),
-      random: _FixedRandom(<int>[
-        5, 1, // opening roll -> white starts (AI starts)
-        1, 1, // white opening dice kept after timeout
-        2, 3, // black unlocked by timeout (player)
-      ]),
-    );
-    addTearDown(controller.dispose);
-
-    controller.startNewGame(playerAsWhite: false);
-    await Future<void>.delayed(const Duration(milliseconds: 520));
-
-    expect(controller.diceForColor('w'), isNotEmpty);
-    expect(controller.diceForColor('b'), isNotEmpty);
-
-    await _playAllPlayerMoves(controller);
-    expect(
-      controller.history.any((entry) => entry.contains('time expired')),
-      isTrue,
-    );
-    // Player (black) finished, but white still has timed-out leftovers,
-    // so black must wait with no immediate reroll.
-    expect(controller.diceForColor('b'), isEmpty);
-    expect(controller.diceForColor('w'), isNotEmpty);
+    });
   });
 
-  test(
-    'opponent gets queued reroll after timed-out player clears leftovers',
-    () async {
+  test('opponent finishing first waits for timed-out side leftovers', () {
+    fakeAsync((async) {
       final controller = LocalGameController(
-        initialCooldownDuration: const Duration(milliseconds: 250),
-        aiThinkDelayMin: const Duration(milliseconds: 80),
-        aiThinkDelayMax: const Duration(milliseconds: 80),
+        initialCooldownDuration: const Duration(milliseconds: 350),
+        aiThinkDelayMin: const Duration(days: 1),
+        aiThinkDelayMax: const Duration(days: 1),
+        nowProvider: () => clock.now(),
         random: _FixedRandom(<int>[
-          5, 1, // opening roll -> white starts (player)
-          1, 1, // white opening dice
-          1, 1, // black unlocked by timeout (AI), should finish first
-          4, 5, // black queued reroll once white clears leftovers
+          5, 1, // opening roll -> white starts (AI starts)
+          1, 1, // white opening dice kept after timeout
+          2, 3, // black unlocked by timeout (player)
         ]),
       );
       addTearDown(controller.dispose);
 
-      controller.startNewGame(playerAsWhite: true);
-      await _waitUntil(
-        () =>
-            controller.diceForColor('b').isEmpty &&
-            controller.diceForColor('w').isNotEmpty,
-        timeout: const Duration(seconds: 3),
-      );
+      controller.startNewGame(playerAsWhite: false);
+      async.elapse(const Duration(milliseconds: 520));
 
-      await _playAllPlayerMoves(controller);
-      // As soon as overtime white clears, black receives the queued roll.
+      expect(controller.diceForColor('w'), isNotEmpty);
       expect(controller.diceForColor('b'), isNotEmpty);
+
+      _playAllPlayerMoves(controller, async);
+      expect(
+        controller.history.any((entry) => entry.contains('time expired')),
+        isTrue,
+      );
+      // Player (black) finished, but white still has timed-out leftovers,
+      // so black must wait with no immediate reroll.
+      expect(controller.diceForColor('b'), isEmpty);
+      expect(controller.diceForColor('w'), isNotEmpty);
+    });
+  });
+
+  test(
+    'opponent gets queued reroll after timed-out player clears leftovers',
+    () {
+      fakeAsync((async) {
+        final controller = LocalGameController(
+          initialCooldownDuration: const Duration(milliseconds: 250),
+          aiThinkDelayMin: const Duration(milliseconds: 80),
+          aiThinkDelayMax: const Duration(milliseconds: 80),
+          nowProvider: () => clock.now(),
+          random: _FixedRandom(<int>[
+            5, 1, // opening roll -> white starts (player)
+            1, 1, // white opening dice
+            1, 1, // black unlocked by timeout (AI), should finish first
+            4, 5, // black queued reroll once white clears leftovers
+          ]),
+        );
+        addTearDown(controller.dispose);
+
+        controller.startNewGame(playerAsWhite: true);
+        _elapseUntil(
+          async,
+          () =>
+              controller.diceForColor('b').isEmpty &&
+              controller.diceForColor('w').isNotEmpty,
+          timeout: const Duration(seconds: 3),
+        );
+
+        _playAllPlayerMoves(controller, async);
+        // As soon as overtime white clears, black receives the queued roll.
+        expect(controller.diceForColor('b'), isNotEmpty);
+      });
     },
   );
 
@@ -155,51 +166,56 @@ void main() {
 
   test(
     'opponent move keeps player selection when selected source remains valid',
-    () async {
-      final controller = LocalGameController(
-        initialCooldownDuration: const Duration(milliseconds: 250),
-        aiThinkDelayMin: const Duration(milliseconds: 40),
-        aiThinkDelayMax: const Duration(milliseconds: 40),
-        random: _FixedRandom(<int>[
-          5, 1, // opening roll -> white starts (AI)
-          1, 1, // white opening dice
-          2, 3, // black dice unlocked by timeout (player)
-        ]),
-      );
-      addTearDown(controller.dispose);
+    () {
+      fakeAsync((async) {
+        final controller = LocalGameController(
+          initialCooldownDuration: const Duration(milliseconds: 250),
+          aiThinkDelayMin: const Duration(milliseconds: 40),
+          aiThinkDelayMax: const Duration(milliseconds: 40),
+          nowProvider: () => clock.now(),
+          random: _FixedRandom(<int>[
+            5, 1, // opening roll -> white starts (AI)
+            1, 1, // white opening dice
+            2, 3, // black dice unlocked by timeout (player)
+          ]),
+        );
+        addTearDown(controller.dispose);
 
-      controller.startNewGame(playerAsWhite: false);
-      await _waitUntil(
-        () =>
-            controller.canPlayerInteract &&
-            controller.diceForColor('w').isNotEmpty &&
-            controller.diceForColor('b').isNotEmpty &&
-            controller.playableSourcePoints.isNotEmpty,
-        timeout: const Duration(seconds: 3),
-      );
+        controller.startNewGame(playerAsWhite: false);
+        _elapseUntil(
+          async,
+          () =>
+              controller.canPlayerInteract &&
+              controller.diceForColor('w').isNotEmpty &&
+              controller.diceForColor('b').isNotEmpty &&
+              controller.playableSourcePoints.isNotEmpty,
+          timeout: const Duration(seconds: 3),
+        );
 
-      final sourceCandidates = controller.playableSourcePoints.toList()..sort();
-      final selectedSource = sourceCandidates.firstWhere(
-        (point) => controller.points[point].count > 1,
-        orElse: () => sourceCandidates.first,
-      );
-      controller.tapPoint(selectedSource);
-      expect(controller.selectedPoint, selectedSource);
+        final sourceCandidates = controller.playableSourcePoints.toList()
+          ..sort();
+        final selectedSource = sourceCandidates.firstWhere(
+          (point) => controller.points[point].count > 1,
+          orElse: () => sourceCandidates.first,
+        );
+        controller.tapPoint(selectedSource);
+        expect(controller.selectedPoint, selectedSource);
 
-      final previousOpponentMove = controller.opponentLastMove;
-      await _waitUntil(() {
-        final latestOpponentMove = controller.opponentLastMove;
-        if (latestOpponentMove == null) {
-          return false;
-        }
-        if (previousOpponentMove == null) {
-          return true;
-        }
-        return latestOpponentMove != previousOpponentMove;
-      }, timeout: const Duration(seconds: 3));
+        final previousOpponentMove = controller.opponentLastMove;
+        _elapseUntil(async, () {
+          final latestOpponentMove = controller.opponentLastMove;
+          if (latestOpponentMove == null) {
+            return false;
+          }
+          if (previousOpponentMove == null) {
+            return true;
+          }
+          return latestOpponentMove != previousOpponentMove;
+        }, timeout: const Duration(seconds: 3));
 
-      expect(controller.canPlayerInteract, isTrue);
-      expect(controller.selectedPoint, selectedSource);
+        expect(controller.canPlayerInteract, isTrue);
+        expect(controller.selectedPoint, selectedSource);
+      });
     },
   );
 
@@ -236,13 +252,18 @@ void main() {
   });
 }
 
-Future<void> _playAllPlayerMoves(LocalGameController controller) async {
+/// Drives every available player move to completion under fake time.
+///
+/// Mirrors the production interaction loop but advances the fake clock (which
+/// also fires the controller's periodic ticker and any pending AI-turn timers)
+/// between steps instead of sleeping on the wall clock.
+void _playAllPlayerMoves(LocalGameController controller, FakeAsync async) {
   var guard = 0;
   while (controller.diceForColor(controller.playerColor).isNotEmpty &&
       guard < 30) {
     guard += 1;
     if (!controller.canPlayerInteract) {
-      await Future<void>.delayed(const Duration(milliseconds: 5));
+      async.elapse(const Duration(milliseconds: 5));
       continue;
     }
     if (controller.canEnterFromBar) {
@@ -264,23 +285,30 @@ Future<void> _playAllPlayerMoves(LocalGameController controller) async {
       }
       controller.tapPoint(targets.first);
     }
-    await Future<void>.delayed(const Duration(milliseconds: 5));
+    async.elapse(const Duration(milliseconds: 5));
   }
 }
 
-Future<void> _waitUntil(
+/// Deterministic replacement for wall-clock polling: advances fake time in
+/// small ticks until [predicate] holds or [timeout] of fake time elapses.
+void _elapseUntil(
+  FakeAsync async,
   bool Function() predicate, {
   Duration timeout = const Duration(seconds: 2),
   Duration pollEvery = const Duration(milliseconds: 20),
-}) async {
-  final deadline = DateTime.now().add(timeout);
-  while (DateTime.now().isBefore(deadline)) {
+}) {
+  var elapsed = Duration.zero;
+  if (predicate()) {
+    return;
+  }
+  while (elapsed < timeout) {
+    async.elapse(pollEvery);
+    elapsed += pollEvery;
     if (predicate()) {
       return;
     }
-    await Future<void>.delayed(pollEvery);
   }
-  fail('Condition not met before timeout.');
+  fail('Condition not met before fake timeout.');
 }
 
 List<int>? _findSelectableDestinationSource(LocalGameController controller) {

@@ -7,8 +7,11 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 
 import 'package:bulletholebackgammon/main.dart';
+import 'package:bulletholebackgammon/src/game/engine/backgammon_online_controller.dart';
 
 void main() {
   testWidgets('loads local shell and can switch to online tab', (
@@ -21,7 +24,26 @@ void main() {
       tester.view.resetDevicePixelRatio();
     });
 
-    await tester.pumpWidget(const BulletholeBackgammonApp());
+    // Hermetic transport: the online panel's automatic backend health check
+    // and any transport call are served by an in-memory MockClient, so the
+    // test never opens a real socket to localhost:8080. This makes the tab
+    // switch deterministic and independent of test order / network state.
+    var healthChecks = 0;
+    final mockClient = MockClient((request) async {
+      if (request.url.path.endsWith('/healthz')) {
+        healthChecks += 1;
+        return http.Response('{"message":"Healthy."}', 200);
+      }
+      // Any other transport call in this screen stays offline-safe.
+      return http.Response('{}', 200);
+    });
+
+    await tester.pumpWidget(
+      BulletholeBackgammonApp(
+        onlineControllerFactory: () =>
+            BackgammonOnlineController(httpClient: mockClient),
+      ),
+    );
     await tester.pump();
 
     expect(find.byType(AppBar), findsNothing);
@@ -47,5 +69,8 @@ void main() {
     expect(find.text('Matchmaking'), findsOneWidget);
     expect(find.text('Session Status'), findsOneWidget);
     expect(find.text('Transport Debug'), findsOneWidget);
+
+    // The panel's initState health check ran against the stub, not the network.
+    expect(healthChecks, greaterThanOrEqualTo(1));
   });
 }

@@ -19,12 +19,19 @@ class BackgammonOnlinePanel extends StatefulWidget {
     this.isOnlineMode = true,
     this.onModeChanged,
     this.showModeSwitch = true,
+    this.controllerFactory,
     super.key,
   });
 
   final bool isOnlineMode;
   final ValueChanged<bool>? onModeChanged;
   final bool showModeSwitch;
+
+  /// Test-only seam for supplying a controller with a stubbed transport/HTTP
+  /// client so widget tests stay hermetic (no live sockets or health checks).
+  /// Production always leaves this null and builds the default controller.
+  @visibleForTesting
+  final BackgammonOnlineController Function()? controllerFactory;
 
   @override
   State<BackgammonOnlinePanel> createState() => _BackgammonOnlinePanelState();
@@ -56,7 +63,8 @@ class _BackgammonOnlinePanelState extends State<BackgammonOnlinePanel> {
   @override
   void initState() {
     super.initState();
-    _controller = BackgammonOnlineController();
+    _controller =
+        widget.controllerFactory?.call() ?? BackgammonOnlineController();
     _apiBaseController = TextEditingController(text: _defaultBackendUrl);
     _nameController = TextEditingController(text: 'Player');
     _matchSettingsScrollController = ScrollController();

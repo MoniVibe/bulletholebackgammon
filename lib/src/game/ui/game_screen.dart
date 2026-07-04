@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:bullethole_shared/bullethole_shared.dart';
 import 'package:flutter/material.dart';
 
+import '../engine/backgammon_online_controller.dart';
 import '../engine/local_game_controller.dart';
 import 'app_assets.dart';
 import 'backgammon_online_panel.dart';
@@ -14,7 +15,12 @@ enum _GameMode { local, online }
 enum _NewGameColor { white, black, random }
 
 class GameScreen extends StatefulWidget {
-  const GameScreen({super.key});
+  const GameScreen({super.key, this.onlineControllerFactory});
+
+  /// Test-only seam forwarded to [BackgammonOnlinePanel] so widget tests can
+  /// supply a controller with a stubbed HTTP client. Null in production.
+  @visibleForTesting
+  final BackgammonOnlineController Function()? onlineControllerFactory;
 
   @override
   State<GameScreen> createState() => _GameScreenState();
@@ -143,7 +149,11 @@ class _GameScreenState extends State<GameScreen> {
                     Expanded(
                       child: _mode == _GameMode.local
                           ? _buildLocalView()
-                          : const BackgammonOnlinePanel(showModeSwitch: false),
+                          : BackgammonOnlinePanel(
+                              showModeSwitch: false,
+                              controllerFactory:
+                                  widget.onlineControllerFactory,
+                            ),
                     ),
                   ],
                 ),
