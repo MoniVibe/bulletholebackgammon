@@ -152,10 +152,29 @@ class SheshBeshRules {
     var blackBorneOff = position.blackBorneOff;
 
     if (move.source == SheshBeshMoveSource.bar) {
+      // A bar-entry move must consume a checker that is actually on the bar.
+      // Silently clamping an empty bar to 0 (the old `max(0, …)`) removed
+      // nothing from the source yet still placed a checker on the destination,
+      // fabricating a 16th checker for the side. That is an invariant
+      // violation, not a legal state — reject it loudly. The pure move
+      // generator (_singleDieMoves) only emits a bar move when the bar is
+      // non-empty, so legitimate play never reaches this throw.
       if (color == 'w') {
-        whiteBar = max(0, whiteBar - 1);
+        if (whiteBar <= 0) {
+          throw StateError(
+            'Illegal bar-entry move for white: white bar is empty. '
+            'Applying it would fabricate a checker.',
+          );
+        }
+        whiteBar -= 1;
       } else {
-        blackBar = max(0, blackBar - 1);
+        if (blackBar <= 0) {
+          throw StateError(
+            'Illegal bar-entry move for black: black bar is empty. '
+            'Applying it would fabricate a checker.',
+          );
+        }
+        blackBar -= 1;
       }
     } else {
       final from = move.fromPoint!;
@@ -172,12 +191,15 @@ class SheshBeshRules {
       } else {
         blackBorneOff += 1;
       }
-      return SheshBeshPosition(
-        points: points,
-        whiteBar: whiteBar,
-        blackBar: blackBar,
-        whiteBorneOff: whiteBorneOff,
-        blackBorneOff: blackBorneOff,
+      return _verifyConservation(
+        before: position,
+        after: SheshBeshPosition(
+          points: points,
+          whiteBar: whiteBar,
+          blackBar: blackBar,
+          whiteBorneOff: whiteBorneOff,
+          blackBorneOff: blackBorneOff,
+        ),
       );
     }
 
@@ -199,13 +221,56 @@ class SheshBeshRules {
       points[to] = SheshBeshPoint(color: color, count: destination.count + 1);
     }
 
-    return SheshBeshPosition(
-      points: points,
-      whiteBar: whiteBar,
-      blackBar: blackBar,
-      whiteBorneOff: whiteBorneOff,
-      blackBorneOff: blackBorneOff,
+    return _verifyConservation(
+      before: position,
+      after: SheshBeshPosition(
+        points: points,
+        whiteBar: whiteBar,
+        blackBar: blackBar,
+        whiteBorneOff: whiteBorneOff,
+        blackBorneOff: blackBorneOff,
+      ),
     );
+  }
+
+  /// Total checkers of [color]: on-board points + bar + borne-off. O(24).
+  static int checkerTotal(SheshBeshPosition position, String color) {
+    var onBoard = 0;
+    for (final point in position.points) {
+      if (point.color == color) {
+        onBoard += point.count;
+      }
+    }
+    return onBoard + position.barCount(color) + position.borneOffCount(color);
+  }
+
+  /// Runtime guard: a correct move never changes either side's checker total.
+  ///
+  /// Every legal transition conserves per-side totals — entry (-1 bar,
+  /// +1 point), a plain move (-1 source, +1 dest), a bear-off (-1 point,
+  /// +1 borne-off), and a hit (opponent -1 point, +1 bar; mover unchanged).
+  /// The phantom-checker bug this guard exists to catch raised the mover's
+  /// total by one. Checking conservation RELATIVE TO THE INPUT (not against a
+  /// hard 15) catches that corruption while still permitting `computeTurnDecision`
+  /// to search over partial, synthetic positions. This throws in release too
+  /// (not just a debug `assert`) because silent drift is the whole problem;
+  /// cost is O(24), negligible.
+  static SheshBeshPosition _verifyConservation({
+    required SheshBeshPosition before,
+    required SheshBeshPosition after,
+  }) {
+    final whiteBefore = checkerTotal(before, 'w');
+    final blackBefore = checkerTotal(before, 'b');
+    final whiteAfter = checkerTotal(after, 'w');
+    final blackAfter = checkerTotal(after, 'b');
+    if (whiteAfter != whiteBefore || blackAfter != blackBefore) {
+      throw StateError(
+        'Checker conservation violated by applyMove: '
+        'white $whiteBefore -> $whiteAfter, black $blackBefore -> $blackAfter. '
+        'A legal move must not change either side total.',
+      );
+    }
+    return after;
   }
 
   static int pipCount(SheshBeshPosition position, String color) {
