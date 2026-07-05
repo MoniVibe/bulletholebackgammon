@@ -18,7 +18,7 @@ class SkinCatalog {
   static const BoardSkinOption backgammonBoardPainted = BoardSkinOption(
     id: 'bg_painted',
     label: 'Modern Painted',
-    assetPath: null,
+    assetPath: AppAssets.backgammonBoardPainted,
     isPremium: true,
   );
 

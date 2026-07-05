@@ -86,6 +86,18 @@ class LocalGameController extends ChangeNotifier {
   String get playerColor => _playerColor;
   String get aiColor => SheshBeshRules.oppositeColor(_playerColor);
   String get turnColor => _turnColor;
+
+  /// The side currently in an overtime (timed-out but still holding old dice)
+  /// lane, or null when no overtime window is open. Exposed so the UI can tell
+  /// the real active turn ([turnColor]'s lane) apart from an overtime lane
+  /// during a dual-live window instead of showing both sides as "Turn".
+  String? get overtimeColor => _overtimeColor;
+
+  /// True when [color] is allowed to move right now: it is the live turn lane
+  /// with time remaining, or it is the overtime lane. This is the single source
+  /// of truth the side panels use so exactly one lane reads as the active turn.
+  bool isColorActiveNow(String color) => _isColorAllowedToMove(color);
+
   bool get hasActiveGame => _hasActiveGame;
   bool get isGameOver => _winnerColor != null;
   String? get winnerColor => _winnerColor;
@@ -97,7 +109,6 @@ class LocalGameController extends ChangeNotifier {
   List<SheshBeshPoint> get points => _position.points;
   int barCount(String color) => _position.barCount(color);
   int borneOffCount(String color) => _position.borneOffCount(color);
-  List<int> get remainingDice => diceForColor(_turnColor);
   Duration get activeTurnRemaining => _turnRemaining();
 
   // Kept for UI compatibility; in this model it is the active timer for color.

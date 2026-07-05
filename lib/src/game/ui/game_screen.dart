@@ -631,9 +631,8 @@ class _GameScreenState extends State<GameScreen> {
                       width: sideHudWidth,
                       child: _buildTurnSidePanel(
                         sideColor: 'w',
-                        isActive:
-                            _controller.hasActiveGame &&
-                            _controller.hasActiveDice('w'),
+                        isActive: _isTurnLaneActive('w'),
+                        isOvertime: _isOvertimeLane('w'),
                         dice: diceForWhite,
                       ),
                     ),
@@ -651,9 +650,8 @@ class _GameScreenState extends State<GameScreen> {
                       width: sideHudWidth,
                       child: _buildTurnSidePanel(
                         sideColor: 'b',
-                        isActive:
-                            _controller.hasActiveGame &&
-                            _controller.hasActiveDice('b'),
+                        isActive: _isTurnLaneActive('b'),
+                        isOvertime: _isOvertimeLane('b'),
                         dice: diceForBlack,
                       ),
                     ),
@@ -883,15 +881,48 @@ class _GameScreenState extends State<GameScreen> {
     );
   }
 
+  /// True only for the single lane that is the real active turn right now: the
+  /// [LocalGameController.turnColor] lane that is allowed to move and is not the
+  /// overtime lane. During an overtime dual-live window this stays false for the
+  /// overtime side, so exactly one panel ever reads "Turn".
+  bool _isTurnLaneActive(String color) {
+    if (!_controller.hasActiveGame || _controller.isGameOver) {
+      return false;
+    }
+    if (_controller.overtimeColor == color) {
+      return false;
+    }
+    return _controller.turnColor == color &&
+        _controller.isColorActiveNow(color);
+  }
+
+  /// True for the timed-out side that still holds old dice (the overtime lane).
+  bool _isOvertimeLane(String color) {
+    if (!_controller.hasActiveGame || _controller.isGameOver) {
+      return false;
+    }
+    return _controller.overtimeColor == color &&
+        _controller.hasActiveDice(color);
+  }
+
   Widget _buildTurnSidePanel({
     required String sideColor,
     required bool isActive,
+    required bool isOvertime,
     required List<int> dice,
   }) {
     final accent = sideColor == 'w'
         ? const Color(0xFF9ADFFF)
         : const Color(0xFFFFC2A0);
     final label = sideColor == 'w' ? 'White' : 'Black';
+    // Overtime is a live-but-not-the-turn lane; it must be visually distinct
+    // from the real active turn so both panels never both read "Turn".
+    final highlighted = isActive || isOvertime;
+    final statusWord = isActive
+        ? 'Turn'
+        : isOvertime
+        ? 'Overtime'
+        : 'Waiting';
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -903,16 +934,16 @@ class _GameScreenState extends State<GameScreen> {
         return DecoratedBox(
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(14),
-            color: Colors.black.withValues(alpha: isActive ? 0.32 : 0.14),
+            color: Colors.black.withValues(alpha: highlighted ? 0.32 : 0.14),
             border: Border.all(
-              color: accent.withValues(alpha: isActive ? 0.95 : 0.34),
-              width: isActive ? 2.2 : 1.2,
+              color: accent.withValues(alpha: highlighted ? 0.95 : 0.34),
+              width: highlighted ? 2.2 : 1.2,
             ),
             boxShadow: [
               BoxShadow(
-                color: accent.withValues(alpha: isActive ? 0.24 : 0.08),
-                blurRadius: isActive ? 22 : 12,
-                spreadRadius: isActive ? 1.5 : 0.3,
+                color: accent.withValues(alpha: highlighted ? 0.24 : 0.08),
+                blurRadius: highlighted ? 22 : 12,
+                spreadRadius: highlighted ? 1.5 : 0.3,
               ),
             ],
           ),
@@ -922,7 +953,7 @@ class _GameScreenState extends State<GameScreen> {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Text(
-                  isActive ? '$label Turn' : '$label Waiting',
+                  '$label $statusWord',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontFamily: 'Orbitron',
