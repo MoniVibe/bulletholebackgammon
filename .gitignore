@@ -82,3 +82,7 @@ secrets.*
 # Azure local tooling
 # ------------------------------
 .azure/
+
+# Local QA/bughunt output (duel logs, session captures) — never commit
+debug/
+artifacts/
