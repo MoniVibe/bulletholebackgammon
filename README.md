@@ -25,6 +25,14 @@ flutter pub get
 flutter run
 ```
 
+## Feature Flags
+
+- The Online tab (transport-only prototype) is hidden by default. Enable it with:
+
+```bash
+flutter build web --dart-define=ONLINE_TAB_ENABLED=true
+```
+
 ## Visual asset prep
 
 When replacing board/coin/dice/time-bar images:

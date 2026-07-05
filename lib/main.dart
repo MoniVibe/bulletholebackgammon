@@ -8,12 +8,21 @@ void main() {
 }
 
 class BulletholeBackgammonApp extends StatelessWidget {
-  const BulletholeBackgammonApp({super.key, this.onlineControllerFactory});
+  const BulletholeBackgammonApp({
+    super.key,
+    this.onlineControllerFactory,
+    this.showOnlineTab,
+  });
 
   /// Test-only seam forwarded to [GameScreen] so widget tests can supply a
   /// controller with a stubbed HTTP client. Null in production.
   @visibleForTesting
   final BackgammonOnlineController Function()? onlineControllerFactory;
+
+  /// Test-only seam forwarded to [GameScreen] to force the Online tab on/off
+  /// without dart-defines. Null in production (uses kOnlineTabEnabled).
+  @visibleForTesting
+  final bool? showOnlineTab;
 
   @override
   Widget build(BuildContext context) {
@@ -79,7 +88,10 @@ class BulletholeBackgammonApp extends StatelessWidget {
           ),
         ),
       ),
-      home: GameScreen(onlineControllerFactory: onlineControllerFactory),
+      home: GameScreen(
+        onlineControllerFactory: onlineControllerFactory,
+        showOnlineTab: showOnlineTab,
+      ),
     );
   }
 }

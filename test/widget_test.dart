@@ -40,6 +40,7 @@ void main() {
 
     await tester.pumpWidget(
       BulletholeBackgammonApp(
+        showOnlineTab: true,
         onlineControllerFactory: () =>
             BackgammonOnlineController(httpClient: mockClient),
       ),
@@ -72,5 +73,28 @@ void main() {
 
     // The panel's initState health check ran against the stub, not the network.
     expect(healthChecks, greaterThanOrEqualTo(1));
+  });
+
+  testWidgets('hides the online tab by default (ONLINE_TAB_ENABLED off)', (
+    WidgetTester tester,
+  ) async {
+    tester.view.physicalSize = const Size(1400, 2200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    // No showOnlineTab override: exercises the default kOnlineTabEnabled
+    // flag, which is false unless ONLINE_TAB_ENABLED=true is dart-defined.
+    await tester.pumpWidget(const BulletholeBackgammonApp());
+    await tester.pump();
+
+    expect(find.text('Sheshbesh Local'), findsOneWidget);
+    expect(find.text('Online'), findsNothing);
+    expect(find.text('Sheshbesh Online'), findsNothing);
+    expect(find.text('Game Menu'), findsOneWidget);
+    expect(find.byKey(const ValueKey('top_bar')), findsOneWidget);
+    expect(find.byKey(const ValueKey('bottom_bar')), findsOneWidget);
   });
 }

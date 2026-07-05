@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:bullethole_shared/bullethole_shared.dart';
 import 'package:flutter/material.dart';
 
+import '../../game/config/feature_flags.dart';
 import '../engine/backgammon_online_controller.dart';
 import '../engine/local_game_controller.dart';
 import 'app_assets.dart';
@@ -15,12 +16,17 @@ enum _GameMode { local, online }
 enum _NewGameColor { white, black, random }
 
 class GameScreen extends StatefulWidget {
-  const GameScreen({super.key, this.onlineControllerFactory});
+  const GameScreen({super.key, this.onlineControllerFactory, this.showOnlineTab});
 
   /// Test-only seam forwarded to [BackgammonOnlinePanel] so widget tests can
   /// supply a controller with a stubbed HTTP client. Null in production.
   @visibleForTesting
   final BackgammonOnlineController Function()? onlineControllerFactory;
+
+  /// Overrides [kOnlineTabEnabled] for tests. Null means "use the compile-time
+  /// flag"; production always leaves this null.
+  @visibleForTesting
+  final bool? showOnlineTab;
 
   @override
   State<GameScreen> createState() => _GameScreenState();
@@ -83,11 +89,14 @@ class _GameScreenState extends State<GameScreen> {
     _precacheVisualAssets();
   }
 
+  bool get _onlineTabEnabled => widget.showOnlineTab ?? kOnlineTabEnabled;
+
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
       animation: _controller,
       builder: (context, _) {
+        final showOnline = _onlineTabEnabled && _mode == _GameMode.online;
         return Scaffold(
           body: Stack(
             children: [
@@ -126,34 +135,35 @@ class _GameScreenState extends State<GameScreen> {
                         children: [
                           Expanded(
                             child: Text(
-                              _mode == _GameMode.local
-                                  ? 'Sheshbesh Local'
-                                  : 'Sheshbesh Online',
+                              showOnline
+                                  ? 'Sheshbesh Online'
+                                  : 'Sheshbesh Local',
                               style: Theme.of(context).textTheme.titleLarge
                                   ?.copyWith(fontWeight: FontWeight.w700),
                             ),
                           ),
-                          CompactModeSwitch(
-                            onlineSelected: _mode == _GameMode.online,
-                            onChanged: (online) {
-                              setState(() {
-                                _mode = online
-                                    ? _GameMode.online
-                                    : _GameMode.local;
-                              });
-                            },
-                          ),
+                          if (_onlineTabEnabled)
+                            CompactModeSwitch(
+                              onlineSelected: _mode == _GameMode.online,
+                              onChanged: (online) {
+                                setState(() {
+                                  _mode = online
+                                      ? _GameMode.online
+                                      : _GameMode.local;
+                                });
+                              },
+                            ),
                         ],
                       ),
                     ),
                     Expanded(
-                      child: _mode == _GameMode.local
-                          ? _buildLocalView()
-                          : BackgammonOnlinePanel(
+                      child: showOnline
+                          ? BackgammonOnlinePanel(
                               showModeSwitch: false,
                               controllerFactory:
                                   widget.onlineControllerFactory,
-                            ),
+                            )
+                          : _buildLocalView(),
                     ),
                   ],
                 ),
