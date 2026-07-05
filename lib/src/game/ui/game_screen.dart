@@ -16,7 +16,11 @@ enum _GameMode { local, online }
 enum _NewGameColor { white, black, random }
 
 class GameScreen extends StatefulWidget {
-  const GameScreen({super.key, this.onlineControllerFactory, this.showOnlineTab});
+  const GameScreen({
+    super.key,
+    this.onlineControllerFactory,
+    this.showOnlineTab,
+  });
 
   /// Test-only seam forwarded to [BackgammonOnlinePanel] so widget tests can
   /// supply a controller with a stubbed HTTP client. Null in production.
@@ -160,8 +164,7 @@ class _GameScreenState extends State<GameScreen> {
                       child: showOnline
                           ? BackgammonOnlinePanel(
                               showModeSwitch: false,
-                              controllerFactory:
-                                  widget.onlineControllerFactory,
+                              controllerFactory: widget.onlineControllerFactory,
                             )
                           : _buildLocalView(),
                     ),
